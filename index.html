@@ -14,29 +14,45 @@
             font-family: 'Noto Sans TC', sans-serif;
             -webkit-tap-highlight-color: transparent;
         }
+        
         @media print {
             @page {
                 size: auto;
                 margin: 4mm;
             }
+
+            /* Hide everything on the page by default */
+            body * {
+                visibility: hidden;
+            }
+            
             body {
-                margin: 0;
-                padding: 0;
+                background: white;
             }
-            .no-print {
-                display: none !important;
+
+            /* Make the print area and all its children visible */
+            .print-area, .print-area * {
+                visibility: visible;
             }
+
+            /* Position the print area at the top of the page for printing */
             .print-area {
-                font-family: 'Noto Sans TC', sans-serif;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
             }
+
+            /* Force black text for readability */
             .print-area * {
-                -webkit-print-color-adjust: exact !important;
                 color: #000 !important;
                 background: transparent !important;
                 box-shadow: none !important;
                 border-color: #000 !important;
+                -webkit-print-color-adjust: exact !important;
             }
         }
+
         /* For custom bar chart tooltip */
         .group:hover .group-hover\:opacity-100 {
             opacity: 1;
