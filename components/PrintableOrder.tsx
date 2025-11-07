@@ -24,16 +24,16 @@ const renderPrintableItem = (item: CartItem) => {
 
     return (
         <tr key={item.cartId}>
-            <td className="align-top pr-2">{item.quantity}x</td>
+            <td className="align-top pr-2 font-semibold">{item.quantity}x</td>
             <td className="align-top w-full">
-                {item.item.name.replace(/半全餐|半套餐/g, '套餐')}
+                <span className="font-semibold">{item.item.name.replace(/半全餐|半套餐/g, '套餐')}</span>
                 {details.length > 0 && (
-                    <div className="text-xs font-normal pl-2">
+                    <div className="text-sm font-normal pl-2">
                         {details.map((detail, i) => <div key={i}>- {detail}</div>)}
                     </div>
                 )}
             </td>
-            <td className="align-top pl-2 text-right">{item.totalPrice}</td>
+            <td className="align-top pl-2 text-right font-semibold">{item.totalPrice}</td>
         </tr>
     );
 };
@@ -50,10 +50,10 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
     return (
         // This container's styles are mostly for on-screen preview. 
         // Print styles in index.html will override for the actual printout.
-        <div className="p-2 bg-white text-xs" style={{ width: '280px', margin: '0 auto', color: '#000' }}>
+        <div className="p-2 bg-white text-sm text-black" style={{ width: '280px', margin: '0 auto' }}>
             <div className="text-center space-y-1">
-                <h3 className="text-base font-bold">無名牛排</h3>
-                <p>廚房工作單</p>
+                <h3 className="text-lg font-bold">無名牛排</h3>
+                <p className="font-semibold">廚房工作單</p>
                 <p>--------------------------------</p>
             </div>
             <div className="space-y-0.5 my-2">
@@ -63,12 +63,12 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
                 <p><strong>類型:</strong> {order.orderType} {order.orderType === '內用' && order.customerInfo.tableNumber ? `(${order.customerInfo.tableNumber}桌)` : ''}</p>
             </div>
             <p className="text-center">--------------------------------</p>
-            <table className="w-full my-1 text-xs">
+            <table className="w-full my-1 text-sm">
                 <thead>
                     <tr>
-                        <th className="font-semibold text-left">數</th>
-                        <th className="font-semibold text-left">品項</th>
-                        <th className="font-semibold text-right">小計</th>
+                        <th className="font-bold text-left">數</th>
+                        <th className="font-bold text-left">品項</th>
+                        <th className="font-bold text-right">小計</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -77,10 +77,10 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
             </table>
             <p className="text-center">--------------------------------</p>
             <div className="text-right">
-                <p className="text-base font-bold">總計: ${order.totalPrice}</p>
+                <p className="text-lg font-bold">總計: ${order.totalPrice}</p>
             </div>
             <div className="text-center mt-4">
-                <p className="text-xxs">感謝您的訂購！</p>
+                <p className="text-xs">感謝您的訂購！</p>
             </div>
         </div>
     );
