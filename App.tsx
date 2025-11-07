@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MenuItem, MenuCategory, Addon, CartItem, OrderData, OptionsData } from './types';
-import { apiService } from './services/apiService';
+import { apiService } from './services/apiService.ts';
 import { MENU_DATA, ADDONS } from './constants';
 import Menu from './components/Menu';
 import ItemModal from './components/ItemModal';
