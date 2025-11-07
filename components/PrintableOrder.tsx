@@ -28,7 +28,7 @@ const renderPrintableItem = (item: CartItem) => {
             <td className="align-top w-full">
                 <span className="font-bold">{item.item.name.replace(/半全餐|半套餐/g, '套餐')}</span>
                 {details.length > 0 && (
-                    <div className="text-sm font-semibold pl-2">
+                    <div className="text-xl font-semibold pl-2">
                         {details.map((detail, i) => <div key={i}>- {detail}</div>)}
                     </div>
                 )}
@@ -49,20 +49,20 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
     
     return (
         // These styles significantly increase font size and weight for better readability on thermal printers.
-        <div className="p-2 bg-white text-base text-black" style={{ width: '280px', margin: '0 auto' }}>
+        <div className="p-2 bg-white text-3xl text-black" style={{ width: '280px', margin: '0 auto' }}>
             <div className="text-center space-y-1">
-                <h3 className="text-2xl font-bold">無名牛排</h3>
-                <p className="text-lg font-bold">廚房工作單</p>
+                <h3 className="text-5xl font-bold">無名牛排</h3>
+                <p className="text-3xl font-bold">廚房工作單</p>
                 <p>--------------------------------</p>
             </div>
-            <div className="space-y-0.5 my-2 font-semibold">
+            <div className="space-y-0.5 my-2 font-semibold text-2xl">
                 {finalOrderId && <p><strong>單號:</strong> {finalOrderId}</p>}
                 <p><strong>時間:</strong> {createdAt}</p>
                 <p><strong>顧客:</strong> {order.customerInfo.name} ({order.customerInfo.phone})</p>
                 <p><strong>類型:</strong> {order.orderType} {order.orderType === '內用' && order.customerInfo.tableNumber ? `(${order.customerInfo.tableNumber}桌)` : ''}</p>
             </div>
             <p className="text-center">--------------------------------</p>
-            <table className="w-full my-1 text-base">
+            <table className="w-full my-1 text-2xl">
                 <thead>
                     <tr>
                         <th className="font-bold text-left">數</th>
@@ -76,10 +76,10 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
             </table>
             <p className="text-center">--------------------------------</p>
             <div className="text-right">
-                <p className="text-2xl font-bold">總計: ${order.totalPrice}</p>
+                <p className="text-5xl font-bold">總計: ${order.totalPrice}</p>
             </div>
             <div className="text-center mt-4">
-                <p className="text-sm">感謝您的訂購！</p>
+                <p className="text-xl">感謝您的訂購！</p>
             </div>
         </div>
     );
