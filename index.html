@@ -21,29 +21,16 @@
                 margin: 4mm;
             }
 
-            /* Hide everything on the page by default */
-            body * {
-                visibility: hidden;
-            }
-            
             body {
                 background: white;
             }
 
-            /* Make the print area and all its children visible */
-            .print-area, .print-area * {
-                visibility: visible;
+            /* Hide all elements designated as non-printable */
+            .no-print {
+                display: none !important;
             }
 
-            /* Position the print area at the top of the page for printing */
-            .print-area {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-            }
-
-            /* Force black text for readability */
+            /* Force black text for readability on the printout */
             .print-area * {
                 color: #000 !important;
                 background: transparent !important;
