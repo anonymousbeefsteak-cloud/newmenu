@@ -15,11 +15,21 @@
             -webkit-tap-highlight-color: transparent;
         }
         @media print {
+            @page {
+                size: auto;
+                margin: 4mm;
+            }
+            body {
+                margin: 0;
+                padding: 0;
+                -webkit-print-color-adjust: exact;
+            }
             body * {
                 visibility: hidden;
             }
             .print-area, .print-area * {
                 visibility: visible;
+                font-family: 'Noto Sans TC', sans-serif;
             }
             .print-area {
                 position: absolute !important;
@@ -31,9 +41,9 @@
             }
             .print-area * {
                 color: #000 !important;
-                background-color: transparent !important;
+                background: transparent !important;
                 box-shadow: none !important;
-                border-color: #ddd !important;
+                border-color: #000 !important;
             }
             .no-print {
                 display: none !important;
