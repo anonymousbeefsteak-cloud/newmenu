@@ -1,230 +1,371 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { apiService } from '../services/apiService';
-import type { MenuCategory, Addon, OptionsData, Option } from '../types';
+import type { MenuItem, MenuCategory, Addon, CartItem, OrderData, OptionsData } from './types';
+import { apiService } from './services/apiService.ts';
+import { MENU_DATA, ADDONS } from './constants';
+import Menu from './components/Menu';
+import ItemModal from './components/ItemModal';
+import Cart from './components/Cart';
+import OrderQueryModal from './components/OrderQueryModal';
+import WelcomeModal from './components/WelcomeModal';
+import AIAssistantModal from './components/AIAssistantModal';
+import { CartIcon, RefreshIcon, SearchIcon, SparklesIcon } from './components/icons';
+import { AdminDashboard } from './components/AdminDashboard.tsx';
+import { PrintableOrder } from './components/PrintableOrder';
 
-const ToggleSwitch: React.FC<{
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-  label?: string;
-}> = ({ enabled, onChange, label }) => (
-  <label htmlFor={label} className="flex items-center cursor-pointer">
-    <div className="relative">
-      <input
-        id={label}
-        type="checkbox"
-        className="sr-only"
-        checked={enabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <div className={`block w-12 h-6 rounded-full transition-colors ${enabled ? 'bg-green-500' : 'bg-slate-300'}`}></div>
-      <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${enabled ? 'translate-x-6' : ''}`}></div>
-    </div>
-    <div className="ml-3 text-sm font-medium text-slate-700">{enabled ? '供應中' : '售完'}</div>
-  </label>
-);
+const App: React.FC = () => {
+    const [cart, setCart] = useState<CartItem[]>([]);
+    const [isCartOpen, setIsCartOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState<{ item: MenuItem, category: MenuCategory } | null>(null);
+    const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
+    const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
+    const [isEditingFromCart, setIsEditingFromCart] = useState(false);
+    const [printContent, setPrintContent] = useState<React.ReactNode | null>(null);
+    const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
-interface AvailabilityManagerProps {
-    isOpen: boolean;
-    onAvailabilityUpdate: () => void;
-}
+    const [menuData, setMenuData] = useState<MenuCategory[]>([]);
+    const [addons, setAddons] = useState<Addon[]>([]);
+    const [options, setOptions] = useState<OptionsData>({ sauces: [], dessertsA: [], dessertsB: [], pastasA: [], pastasB: [], coldNoodles: [] });
+    const [loading, setLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [notification, setNotification] = useState<string | null>(null);
 
-const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({ isOpen, onAvailabilityUpdate }) => {
-  const [initialMenu, setInitialMenu] = useState<MenuCategory[]>([]);
-  const [initialAddons, setInitialAddons] = useState<Addon[]>([]);
-  const [initialOptions, setInitialOptions] = useState<OptionsData | null>(null);
+    const fetchData = useCallback(async () => {
+        setNotification(null);
+        const { menu, addons, options: apiOptions, from } = await apiService.getMenuAndAddons();
 
-  const [availability, setAvailability] = useState<{
-    menu: Record<string, boolean>;
-    addons: Record<string, boolean>;
-    options: Partial<Record<keyof OptionsData, Record<string, boolean>>>;
-  }>({ menu: {}, addons: {}, options: {} });
-
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const { menu, addons, options } = await apiService.getMenuAndAddons();
-      setInitialMenu(menu);
-      setInitialAddons(addons);
-      setInitialOptions(options);
-
-      const menuAvail = Object.fromEntries(menu.flatMap(cat => cat.items.map(item => [item.id, item.isAvailable])));
-      const addonAvail = Object.fromEntries(addons.map(addon => [addon.id, addon.isAvailable]));
-      const optionsAvail = Object.fromEntries(
-          Object.entries(options).map(([key, val]) => [
-              key,
-              // FIX: Ensure val is an array before calling .map to prevent 'unknown' type error.
-              Object.fromEntries((Array.isArray(val) ? val : []).map((opt: Option) => [opt.name, opt.isAvailable]))
-          ])
-      );
-      
-      setAvailability({ menu: menuAvail, addons: addonAvail, options: optionsAvail });
-    } catch (err) {
-      setError('無法載入菜單資料，請稍後再試。');
-    }
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchData();
-    }
-  }, [isOpen, fetchData]);
-  
-  const initialAvailability = useMemo(() => {
-      const menuAvail = Object.fromEntries(initialMenu.flatMap(cat => cat.items.map(item => [item.id, item.isAvailable])));
-      const addonAvail = Object.fromEntries(initialAddons.map(addon => [addon.id, addon.isAvailable]));
-      const optionsAvail = initialOptions ? Object.fromEntries(
-          Object.entries(initialOptions).map(([key, val]) => [
-              key,
-              Object.fromEntries((Array.isArray(val) ? val : []).map((opt: Option) => [opt.name, opt.isAvailable]))
-          ])
-      ) : {};
-      return { menu: menuAvail, addons: addonAvail, options: optionsAvail };
-  }, [initialMenu, initialAddons, initialOptions]);
-
-  const hasChanges = useMemo(() => {
-    return JSON.stringify(availability) !== JSON.stringify(initialAvailability);
-  }, [availability, initialAvailability]);
-
-  const handleToggle = (type: 'menu' | 'addons' | 'options', id: string, newStatus: boolean, optionType?: keyof OptionsData) => {
-    setSuccessMessage(null);
-    if (type === 'options' && optionType) {
-        setAvailability(prev => ({
-            ...prev,
-            options: {
-                ...prev.options,
-                [optionType]: {
-                    ...prev.options[optionType],
-                    [id]: newStatus,
-                }
-            }
-        }));
-    } else if (type !== 'options') {
-        setAvailability(prev => ({
-          ...prev,
-          [type]: {
-            ...prev[type],
-            [id]: newStatus,
-          },
-        }));
-    }
-  };
-  
-  const handleSaveChanges = async () => {
-      setIsSaving(true);
-      setError(null);
-      setSuccessMessage(null);
-      const result = await apiService.updateAvailability(availability);
-      if(result.success) {
-          setSuccessMessage('供應狀態已成功儲存！');
-          onAvailabilityUpdate(); // Signal parent to refetch
-          await fetchData(); // Also refetch local state to update the "initial" state for hasChanges logic
-      } else {
-          setError(result.message || '儲存失敗，請重試。');
-      }
-      setIsSaving(false);
-  }
-
-  const addonGroups = useMemo(() => {
-    return initialAddons.reduce((acc, addon) => {
-      (acc[addon.category] = acc[addon.category] || []).push(addon);
-      return acc;
-    }, {} as { [key: string]: Addon[] });
-  }, [initialAddons]);
-
-  const optionSections: { key: keyof OptionsData, title: string }[] = [
-    { key: 'sauces', title: '主菜沾醬' },
-    { key: 'coldNoodles', title: '涼麵口味' },
-    { key: 'pastasA', title: '義大利麵主食 (A區)' },
-    { key: 'pastasB', title: '義大利麵醬料 (B區)' },
-    { key: 'dessertsA', title: '甜品 (A區)' },
-    { key: 'dessertsB', title: '甜品 (B區)' },
-  ];
-
-  if (isLoading) return <p className="text-center p-8">正在載入供應項目...</p>;
-  if (error) return <p className="text-red-500 bg-red-100 p-3 rounded-md text-center">{error}</p>;
-
-  return (
-    <div className="space-y-8">
-      {initialMenu.map(category => (
-        <div key={category.title} className="bg-white p-4 rounded-lg shadow-sm">
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4">{category.title}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {category.items.map(item => (
-              <div key={item.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-md">
-                <span className="text-sm font-medium text-slate-800">{item.name}</span>
-                <ToggleSwitch
-                  enabled={availability.menu[item.id] ?? false}
-                  onChange={newStatus => handleToggle('menu', item.id, newStatus)}
-                  label={`menu-${item.id}`}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-
-      {Object.entries(addonGroups).map(([category, addons]) => (
-        <div key={category} className="bg-white p-4 rounded-lg shadow-sm">
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4">{category}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {addons.map(addon => (
-              <div key={addon.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-md">
-                <span className="text-sm font-medium text-slate-800">{addon.name}</span>
-                <ToggleSwitch
-                  enabled={availability.addons[addon.id] ?? false}
-                  onChange={newStatus => handleToggle('addons', addon.id, newStatus)}
-                  label={`addon-${addon.id}`}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-      
-      {initialOptions && optionSections.map(section => {
-        const optionsList = initialOptions[section.key];
-        if (!Array.isArray(optionsList) || optionsList.length === 0) {
-            return null;
+        if (from === 'api' && (!menu || menu.length === 0 || menu.every(cat => cat.items.length === 0))) {
+            setMenuData(MENU_DATA);
+            setAddons(ADDONS);
+            setNotification('成功連接伺服器，但菜單是空的。請檢查後台 Google Sheet 是否已填入資料，或執行「一鍵設定工作表」。');
+        } else {
+            setMenuData(menu);
+            setAddons(addons);
         }
-        return (
-            <div key={section.key} className="bg-white p-4 rounded-lg shadow-sm">
-                <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4">{section.title}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* FIX: Explicitly type `option` to resolve type inference issues where `optionsList` is treated as `unknown[]`. */}
-                    {optionsList.map((option: Option) => (
-                        <div key={option.name} className="flex justify-between items-center bg-slate-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-slate-800">{option.name}</span>
-                            <ToggleSwitch
-                                enabled={availability.options[section.key]?.[option.name] ?? false}
-                                onChange={newStatus => handleToggle('options', option.name, newStatus, section.key)}
-                                label={`option-${section.key}-${option.name}`}
-                            />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )
-      })}
 
-      <div className="sticky bottom-0 bg-white/80 backdrop-blur-sm p-4 rounded-t-lg shadow-lg -mx-6 -mb-6 mt-8">
-        {successMessage && <div className="text-green-600 bg-green-100 p-3 rounded-md text-center mb-3">{successMessage}</div>}
-        <button 
-          onClick={handleSaveChanges} 
-          disabled={!hasChanges || isSaving}
-          className="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
-        >
-          {isSaving ? '儲存中...' : '儲存變更'}
-        </button>
-      </div>
-    </div>
-  );
+        setOptions(apiOptions);
+
+        if (from === 'fallback') {
+            setNotification('無法連接伺服器，目前顯示的是離線菜單。');
+        }
+    }, []);
+    
+    useEffect(() => {
+        if (printContent) {
+            // A short delay ensures the content is rendered before the print dialog appears.
+            const timer = setTimeout(() => {
+                window.print();
+                // After the blocking print dialog is closed, this code will execute.
+                setPrintContent(null);
+                window.location.reload();
+            }, 100);
+
+            return () => {
+                clearTimeout(timer);
+            };
+        }
+    }, [printContent]);
+
+    const handlePrintRequest = (content: React.ReactNode) => {
+        setPrintContent(content);
+    };
+
+
+    useEffect(() => {
+        const initialLoad = async () => {
+            setLoading(true);
+            await fetchData();
+            setLoading(false);
+            if (sessionStorage.getItem('welcomeAgreed') !== 'true') {
+                setIsWelcomeModalOpen(true);
+            }
+        };
+        initialLoad();
+    }, [fetchData]);
+
+    const handleWelcomeAgree = () => {
+        sessionStorage.setItem('welcomeAgreed', 'true');
+        setIsWelcomeModalOpen(false);
+    };
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await fetchData();
+        setIsRefreshing(false);
+    };
+    
+    useEffect(() => {
+        const handleAdminKey = (event: KeyboardEvent) => {
+            if (event.key === '`') { // Tilde key
+                setIsAdminDashboardOpen(true);
+            }
+        };
+        window.addEventListener('keydown', handleAdminKey);
+        return () => window.removeEventListener('keydown', handleAdminKey);
+    }, []);
+
+    const handleSelectItem = (item: MenuItem, category: MenuCategory) => {
+        if (!item.isAvailable) return;
+        setSelectedItem({ item, category });
+    };
+
+    const handleCloseModal = () => {
+        setSelectedItem(null);
+        setEditingCartItem(null);
+        setIsEditingFromCart(false); 
+    };
+    
+    const handleEditItem = (cartId: string) => {
+        const itemToEdit = cart.find(i => i.cartId === cartId);
+        if(itemToEdit) {
+            const category = menuData.find(c => c.title === itemToEdit.categoryTitle) || { title: itemToEdit.categoryTitle, items: [] };
+            setIsEditingFromCart(true);
+            setEditingCartItem(itemToEdit);
+            setSelectedItem({ item: itemToEdit.item, category });
+        }
+    };
+
+    const createCartItemObject = (item: MenuItem, quantity: number, options: any, category: MenuCategory): Omit<CartItem, 'cartId'> => {
+        const { donenesses, drinks, addons, notes, sauces, desserts, pastas, singleChoiceAddon, multiChoice, componentChoices, sideChoices } = options;
+        
+        const generateStableObjectString = (obj: object) => {
+            if (!obj || Object.keys(obj).length === 0) return '';
+            return JSON.stringify(Object.fromEntries(Object.entries(obj).filter(([, val]) => val && Number(val) > 0).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))));
+        };
+        
+        const singleChoicePrice = singleChoiceAddon && item.customizations.singleChoiceAddon ? item.customizations.singleChoiceAddon.price : 0;
+        const totalAddonPrice = (addons || []).reduce((sum: number, addon: { price: number; quantity: number; }) => sum + (addon.price * addon.quantity), 0);
+        const totalPrice = (item.price + singleChoicePrice) * quantity + totalAddonPrice;
+
+        const cartKeyFields = {
+            id: item.id,
+            donenesses: generateStableObjectString(donenesses),
+            drinks: generateStableObjectString(drinks),
+            sideChoices: generateStableObjectString(sideChoices),
+            multiChoice: generateStableObjectString(multiChoice),
+            componentChoices: generateStableObjectString(componentChoices),
+            notes: notes,
+            addons: (addons || []).map((a: { id: string; quantity: any; }) => `${a.id}:${a.quantity}`).sort().join(','),
+            sauces: (sauces || []).map((s: { name: string; quantity: any; }) => `${s.name}:${s.quantity}`).sort().join(','),
+            desserts: (desserts || []).map((d: { name: string; quantity: any; }) => `${d.name}:${d.quantity}`).sort().join(','),
+            pastas: (pastas || []).map((p: { name: string; quantity: any; }) => `${p.name}:${p.quantity}`).sort().join(','),
+            singleChoiceAddon: singleChoiceAddon || 'none',
+        };
+        const cartKey = JSON.stringify(cartKeyFields);
+
+        return {
+            cartKey,
+            item,
+            quantity,
+            categoryTitle: category.title,
+            selectedDonenesses: donenesses,
+            selectedDrinks: drinks,
+            selectedSideChoices: sideChoices,
+            selectedAddons: addons || [],
+            selectedSauces: sauces || [],
+            selectedDesserts: desserts || [],
+            selectedPastas: pastas || [],
+            selectedComponent: componentChoices,
+            selectedNotes: notes,
+            selectedSingleChoiceAddon: singleChoiceAddon,
+            selectedMultiChoice: multiChoice,
+            totalPrice,
+        };
+    };
+    
+    const handleConfirmSelection = (item: MenuItem, quantity: number, options: any, category: MenuCategory) => {
+        const newOrUpdatedCartItem = createCartItemObject(item, quantity, options, category);
+
+        if (editingCartItem && cart.some(i => i.cartId === editingCartItem.cartId)) {
+            setCart(prevCart => prevCart.map(cartItem =>
+                cartItem.cartId === editingCartItem.cartId
+                    ? { ...newOrUpdatedCartItem, cartId: editingCartItem.cartId }
+                    : cartItem
+            ));
+        } else {
+            setCart(prevCart => {
+                const existingItemIndex = prevCart.findIndex(cartItem => cartItem.cartKey === newOrUpdatedCartItem.cartKey);
+                if (existingItemIndex > -1) {
+                    const updatedCart = [...prevCart];
+                    const existingItem = updatedCart[existingItemIndex];
+                    const newQuantity = existingItem.quantity + quantity;
+
+                    const singleChoicePrice = existingItem.selectedSingleChoiceAddon && item.customizations.singleChoiceAddon ? item.customizations.singleChoiceAddon.price : 0;
+                    const totalAddonPrice = (existingItem.selectedAddons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                    const newTotalPrice = (item.price + singleChoicePrice) * newQuantity + totalAddonPrice;
+
+                    updatedCart[existingItemIndex] = { ...existingItem, quantity: newQuantity, totalPrice: newTotalPrice };
+                    return updatedCart;
+                } else {
+                    const finalCartItem = { ...newOrUpdatedCartItem, cartId: `${newOrUpdatedCartItem.cartKey}-${Date.now()}` };
+                    return [...prevCart, finalCartItem];
+                }
+            });
+        }
+
+        if (isEditingFromCart) {
+            setIsCartOpen(true);
+        }
+    };
+    
+    const handleUpdateQuantity = (cartId: string, newQuantity: number) => {
+        setCart(prevCart => {
+            if (newQuantity <= 0) {
+                return prevCart.filter(item => item.cartId !== cartId);
+            }
+            return prevCart.map(item => {
+                if (item.cartId === cartId) {
+                    const singleChoicePrice = item.selectedSingleChoiceAddon && item.item.customizations.singleChoiceAddon ? item.item.customizations.singleChoiceAddon.price : 0;
+                    const totalAddonPrice = (item.selectedAddons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                    const newTotalPrice = (item.item.price + singleChoicePrice) * newQuantity + totalAddonPrice;
+                    return { ...item, quantity: newQuantity, totalPrice: newTotalPrice };
+                }
+                return item;
+            });
+        });
+    };
+
+    const handleRemoveFromCart = (cartId: string) => {
+        setCart(prevCart => prevCart.filter(item => item.cartId !== cartId));
+    };
+
+    const handleSubmitOrder = async (orderData: OrderData) => {
+        const result = await apiService.submitOrder(orderData);
+        if (result.success && result.orderId) {
+            setCart([]);
+            setIsCartOpen(false);
+            
+            // The new flow: directly call the print request handler upon successful order submission.
+            // This bypasses any confirmation modals and proceeds straight to printing, then reloads the page.
+            handlePrintRequest(<PrintableOrder order={orderData} orderId={result.orderId} />);
+
+            // Keep track of recent orders for the query modal.
+            const savedOrders = JSON.parse(localStorage.getItem('steakhouse-orders') || '[]');
+            if (!savedOrders.includes(result.orderId)) {
+                savedOrders.unshift(result.orderId);
+                localStorage.setItem('steakhouse-orders', JSON.stringify(savedOrders.slice(0, 10)));
+            }
+        }
+        return result;
+    };
+    
+    const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex flex-col justify-center items-center bg-slate-100">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-700"></div>
+                <p className="mt-4 text-slate-600 text-lg">正在載入菜單...</p>
+            </div>
+        );
+    }
+
+    return (
+        <>
+            <div className="print-area">
+              {printContent}
+            </div>
+
+            <div className="no-print">
+                {isWelcomeModalOpen && <WelcomeModal onAgree={handleWelcomeAgree} />}
+                <div className="min-h-screen bg-slate-100 text-slate-800">
+                    {notification && (
+                        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
+                            <p className="font-bold">{notification}</p>
+                        </div>
+                    )}
+                    <header className="bg-white shadow-md sticky top-0 z-20">
+                        <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setIsQueryModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
+                                    <SearchIcon className="h-4 w-4"/>
+                                    <span>查詢訂單</span>
+                                </button>
+                                <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium disabled:opacity-50">
+                                    <RefreshIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}/>
+                                    <span>{isRefreshing ? '刷新中' : '刷新'}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="container mx-auto p-4 md:p-6 lg:p-8">
+                        <Menu menuData={menuData} onSelectItem={handleSelectItem} />
+                    </main>
+
+                    <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
+                        <div className="border-t border-slate-200 pt-8 space-y-2">
+                            <p>＊店內最低消費為一份餐點</p>
+                            <p>＊不收服務費，用完餐請回收餐具</p>
+                            <p>＊用餐限九十分鐘請勿飲酒</p>
+                            <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
+                        </div>
+                    </footer>
+
+                    <button
+                        onClick={() => setIsAiModalOpen(true)}
+                        className="fixed bottom-24 right-6 lg:bottom-28 lg:right-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50 h-16 w-16"
+                        aria-label="開啟 AI 點餐小幫手"
+                    >
+                        <SparklesIcon className="h-8 w-8" />
+                    </button>
+
+                    {cartItemCount > 0 && (
+                        <button
+                            onClick={() => setIsCartOpen(true)}
+                            className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 flex items-center justify-center bg-green-700 text-white rounded-full shadow-lg hover:bg-green-800 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 h-16 w-16"
+                            aria-label={`查看購物車，共有 ${cartItemCount} 項商品`}
+                        >
+                            <CartIcon className="h-8 w-8" />
+                            <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{cartItemCount}</span>
+                        </button>
+                    )}
+                </div>
+
+                <Cart
+                    isOpen={isCartOpen}
+                    onClose={() => setIsCartOpen(false)}
+                    cartItems={cart}
+                    onUpdateQuantity={handleUpdateQuantity}
+                    onRemoveItem={handleRemoveFromCart}
+                    onEditItem={handleEditItem}
+                    onSubmitOrder={handleSubmitOrder}
+                />
+
+                {selectedItem && (
+                    <ItemModal
+                        selectedItem={selectedItem}
+                        editingItem={editingCartItem}
+                        addons={addons}
+                        options={options}
+                        onClose={handleCloseModal}
+                        onConfirmSelection={handleConfirmSelection}
+                    />
+                )}
+                
+                <OrderQueryModal
+                    isOpen={isQueryModalOpen}
+                    onClose={() => setIsQueryModalOpen(false)}
+                />
+
+                <AdminDashboard 
+                    isOpen={isAdminDashboardOpen}
+                    onClose={() => setIsAdminDashboardOpen(false)}
+                    onPrintRequest={handlePrintRequest}
+                    onAvailabilityUpdate={fetchData}
+                />
+                
+                <AIAssistantModal
+                    isOpen={isAiModalOpen}
+                    onClose={() => setIsAiModalOpen(false)}
+                    menuData={menuData}
+                    addons={addons}
+                />
+            </div>
+        </>
+    );
 };
 
-export default AvailabilityManager;
+export default App;
