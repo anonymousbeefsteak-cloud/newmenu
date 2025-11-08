@@ -1,134 +1,94 @@
-import React from 'react';
-import type { Order, CartItem, OrderData } from '../types';
+import React, { useMemo } from 'react';
+import type { Order, OrderData, SelectedSauce } from '../types';
 
 type PrintableOrderProps = {
     order: Order | OrderData | null;
     orderId?: string | null;
 };
 
-// 只合併相同品項名稱，不考慮其他選項
-const mergeItemsByProductName = (items: CartItem[]): CartItem[] => {
-    const mergedMap = new Map();
-    
-    items.forEach(item => {
-        const productName = item.item.name.replace(/半全餐|半套餐/g, '套餐');
-        const key = productName; // 只根據品項名稱合併
-        
-        if (mergedMap.has(key)) {
-            const existing = mergedMap.get(key);
-            existing.quantity += item.quantity;
-            existing.totalPrice = (parseFloat(existing.totalPrice) + parseFloat(item.totalPrice)).toString();
-        } else {
-            mergedMap.set(key, { 
-                ...item,
-                item: {
-                    ...item.item,
-                    name: productName
-                }
-            });
-        }
-    });
-    
-    return Array.from(mergedMap.values());
-};
-
-// 極簡化的品項渲染 - 只顯示名稱和合併數量
-const renderPrintableItem = (item: CartItem, index: number, totalItems: number) => {
-    return (
-        <React.Fragment key={item.cartId || index}>
-            <tr className="border-b border-gray-800">
-                <td className="pr-2 font-black text-5xl py-0 text-center" style={{ width: '20%' }}>
-                    {item.quantity}x
-                </td>
-                <td className="py-0" style={{ width: '60%' }}>
-                    <span className="font-black text-5xl block leading-tight whitespace-nowrap">
-                        {item.item.name}
-                    </span>
-                </td>
-                <td className="pl-2 text-right font-black text-5xl py-0" style={{ width: '20%' }}>
-                    {item.totalPrice}
-                </td>
-            </tr>
-            {/* 品項間的分隔線 */}
-            {index < totalItems - 1 && (
-                <tr>
-                    <td colSpan={3} className="py-0">
-                        <div className="border-t border-dashed border-gray-600"></div>
-                    </td>
-                </tr>
-            )}
-        </React.Fragment>
-    );
-};
-
 export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }) => {
     if (!order) {
         return null;
     }
+
+    // This hook calculates the total quantity of each option (sauces, drinks, etc.)
+    // across all items in the order, which is exactly what the user wants.
+    const summary = useMemo(() => {
+        if (!order?.items) return {};
+        const sauces: { [key: string]: number } = {};
+        const drinks: { [key: string]: number } = {};
+        const desserts: { [key: string]: number } = {};
+        const pastas: { [key: string]: number } = {};
+        const components: { [key: string]: number } = {};
+        const sideChoices: { [key: string]: number } = {};
+        const addons: { [key: string]: number } = {};
+
+        order.items.forEach(cartItem => {
+            if (cartItem.selectedDrinks) Object.entries(cartItem.selectedDrinks).forEach(([name, quantity]) => drinks[name] = (drinks[name] || 0) + Number(quantity));
+            if (cartItem.selectedSauces) (cartItem.selectedSauces as SelectedSauce[]).forEach(sauce => sauces[sauce.name] = (sauces[sauce.name] || 0) + Number(sauce.quantity));
+            if (cartItem.selectedDesserts) cartItem.selectedDesserts.forEach(dessert => desserts[dessert.name] = (desserts[dessert.name] || 0) + Number(dessert.quantity));
+            if (cartItem.selectedPastas) cartItem.selectedPastas.forEach(pasta => pastas[pasta.name] = (pastas[pasta.name] || 0) + Number(pasta.quantity));
+            if (cartItem.selectedComponent) Object.entries(cartItem.selectedComponent).forEach(([name, quantity]) => components[name] = (components[name] || 0) + Number(quantity));
+            if (cartItem.selectedSideChoices) Object.entries(cartItem.selectedSideChoices).forEach(([name, quantity]) => sideChoices[name] = (sideChoices[name] || 0) + Number(quantity));
+            if (cartItem.selectedAddons) cartItem.selectedAddons.forEach(addon => addons[addon.name] = (addons[addon.name] || 0) + Number(addon.quantity));
+        });
+        
+        const result: { [key: string]: { [key: string]: number } } = { components, drinks, sideChoices, sauces, desserts, pastas, addons };
+        // Clean up empty categories from the result
+        Object.keys(result).forEach(key => {
+            if (Object.keys(result[key]).length === 0) {
+                delete result[key];
+            }
+        });
+        return result;
+    }, [order?.items]);
+
+    const summaryTitles: { [key: string]: string } = {
+        components: "炸物總計",
+        drinks: "飲料總計",
+        sideChoices: "簡餐附餐總計",
+        sauces: "醬料總計",
+        desserts: "甜品總計",
+        pastas: "義麵總計",
+        addons: "加購總計",
+    };
     
     const finalOrderId = 'id' in order ? order.id : orderId;
     const createdAt = 'createdAt' in order && order.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString();
     
-    // 合併相同品項（只根據名稱）
-    const mergedItems = mergeItemsByProductName(order.items);
-    
+    // A helper for styling separators in the ticket
+    const separator = (text: string) => <p className="text-center font-bold" style={{ fontSize: '36px', letterSpacing: '-2px', margin: '8px 0' }}>- {text} -</p>;
+
     return (
-        <div className="p-3 bg-white text-black" style={{ width: '350px', margin: '0 auto', lineHeight: '1.1' }}>
-            {/* 標題區塊 */}
-            <div className="text-center mb-2">
-                <h3 className="font-black text-4xl mb-0">無名牛排</h3>
-                <p className="font-black text-3xl mb-1">廚房工作單</p>
-                <div className="border-t border-black my-1"></div>
+        <div className="p-2 bg-white text-black" style={{ width: '280px', margin: '0 auto', fontFamily: 'monospace' }}>
+            <div className="text-center">
+                <h3 className="font-bold" style={{ fontSize: '60px', lineHeight: '1.1' }}>無名牛排</h3>
+                <p className="font-bold" style={{ fontSize: '44px' }}>餐點總計單</p>
             </div>
             
-            {/* 訂單資訊 */}
-            <div className="space-y-0 mb-2 font-bold text-2xl">
-                {finalOrderId && (
-                    <p className="leading-tight">
-                        <span>單號:</span> {finalOrderId}
-                    </p>
-                )}
-                <p className="leading-tight">
-                    <span>時間:</span> {createdAt}
-                </p>
-                <p className="leading-tight">
-                    <span>顧客:</span> {order.customerInfo.name} ({order.customerInfo.phone})
-                </p>
-                <p className="leading-tight">
-                    <span>類型:</span> {order.orderType} 
-                    {order.orderType === '內用' && order.customerInfo.tableNumber ? ` (${order.customerInfo.tableNumber}桌)` : ''}
-                </p>
+            {separator("訂單資訊")}
+            <div className="my-2 font-semibold" style={{ fontSize: '32px', lineHeight: '1.3' }}>
+                {finalOrderId && <p><strong>單號:</strong> {finalOrderId.slice(-6)}</p>}
+                <p><strong>時間:</strong> {createdAt}</p>
+                <p><strong>顧客:</strong> {order.customerInfo.name}</p>
+                <p><strong>類型:</strong> {order.orderType} {order.orderType === '內用' && order.customerInfo.tableNumber ? `(${order.customerInfo.tableNumber}桌)` : ''}</p>
             </div>
             
-            <div className="border-t border-black my-1"></div>
-            
-            {/* 品項表格 - 只顯示合併數量 */}
-            <table className="w-full my-0" style={{ tableLayout: 'fixed', borderCollapse: 'collapse' }}>
-                <thead>
-                    <tr className="border-b-2 border-black">
-                        <th className="font-black text-center pb-1 text-3xl" style={{ width: '20%' }}>數量</th>
-                        <th className="font-black text-left pb-1 text-3xl" style={{ width: '60%' }}>品項</th>
-                        <th className="font-black text-right pb-1 text-3xl" style={{ width: '20%' }}>小計</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {mergedItems.map((item, index) => 
-                        renderPrintableItem(item, index, mergedItems.length)
-                    )}
-                </tbody>
-            </table>
-            
-            <div className="border-t border-black my-1"></div>
-            
-            {/* 總計 */}
-            <div className="text-right mt-1">
-                <p className="text-4xl font-black">總計: ${order.totalPrice}</p>
-            </div>
-            
-            {/* 頁尾 */}
-            <div className="text-center mt-2">
-                <p className="text-2xl font-bold">感謝您的訂購！</p>
-            </div>
+            {Object.keys(summary).length > 0 && (
+                <>
+                    {separator("總計列表")}
+                    <div className="my-2 space-y-2 font-semibold" style={{ fontSize: '32px', lineHeight: '1.3' }}>
+                        {Object.entries(summary).map(([key, items]) => (
+                            <div key={key}>
+                                <strong>{summaryTitles[key]}:</strong>
+                                {Object.entries(items).map(([name, quantity]) => (
+                                    <p key={name} className="pl-2">- {name} x{quantity}</p>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
         </div>
     );
 };
