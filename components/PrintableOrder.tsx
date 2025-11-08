@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MenuItem, MenuCategory, Addon, CartItem, OrderData, OptionsData } from './types';
 import { apiService } from './services/apiService.ts';
 import { MENU_DATA, ADDONS } from './constants';
@@ -32,9 +32,6 @@ const App: React.FC = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [notification, setNotification] = useState<string | null>(null);
 
-    // 使用 ref 來追蹤是否正在列印
-    const isPrintingRef = useRef(false);
-
     const fetchData = useCallback(async () => {
         setNotification(null);
         const { menu, addons, options: apiOptions, from } = await apiService.getMenuAndAddons();
@@ -57,48 +54,25 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (printContent) {
-            // 標記正在列印
-            isPrintingRef.current = true;
-            
-            // 立即強制關閉所有模態框
-            setConfirmationData(null);
-            setIsCartOpen(false);
-            setSelectedItem(null);
-            setEditingCartItem(null);
-            setIsQueryModalOpen(false);
-            setIsAiModalOpen(false);
-            setIsAdminDashboardOpen(false);
-
-            const handleAfterPrint = () => {
-                isPrintingRef.current = false;
-                setPrintContent(null);
-                // 使用 replace 避免回到歷史記錄
+            // 立即強制重新載入，不等待列印完成
+            const reloadTimer = setTimeout(() => {
                 window.location.replace(window.location.origin + window.location.pathname);
-            };
-
-            window.addEventListener('afterprint', handleAfterPrint, { once: true });
-            
-            const timer = setTimeout(() => {
-                window.print();
             }, 100);
 
-            // 備用方案：如果 afterprint 事件沒觸發，3秒後強制重新載入
-            const backupTimer = setTimeout(() => {
-                window.removeEventListener('afterprint', handleAfterPrint);
-                isPrintingRef.current = false;
-                setPrintContent(null);
-                window.location.replace(window.location.origin + window.location.pathname);
-            }, 3000);
+            const printTimer = setTimeout(() => {
+                window.print();
+            }, 50);
 
             return () => {
-                clearTimeout(timer);
-                clearTimeout(backupTimer);
-                window.removeEventListener('afterprint', handleAfterPrint);
+                clearTimeout(reloadTimer);
+                clearTimeout(printTimer);
             };
         }
     }, [printContent]);
 
     const handlePrintRequest = (content: React.ReactNode) => {
+        // 立即清除確認數據
+        setConfirmationData(null);
         setPrintContent(content);
     };
 
@@ -300,8 +274,8 @@ const App: React.FC = () => {
             <div className="no-print">
                 {isWelcomeModalOpen && <WelcomeModal onAgree={handleWelcomeAgree} />}
                 
-                {/* 如果正在列印，隱藏所有內容 */}
-                {!isPrintingRef.current && (
+                {/* 如果有列印內容，隱藏所有頁面內容 */}
+                {!printContent && (
                     <div className="min-h-screen bg-slate-100 text-slate-800">
                         {notification && (
                             <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
@@ -358,53 +332,58 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                <Cart
-                    isOpen={isCartOpen}
-                    onClose={() => setIsCartOpen(false)}
-                    cartItems={cart}
-                    onUpdateQuantity={handleUpdateQuantity}
-                    onRemoveItem={handleRemoveFromCart}
-                    onEditItem={handleEditItem}
-                    onSubmitOrder={handleSubmitOrder}
-                />
+                {/* 如果有列印內容，隱藏所有模態框 */}
+                {!printContent && (
+                    <>
+                        <Cart
+                            isOpen={isCartOpen}
+                            onClose={() => setIsCartOpen(false)}
+                            cartItems={cart}
+                            onUpdateQuantity={handleUpdateQuantity}
+                            onRemoveItem={handleRemoveFromCart}
+                            onEditItem={handleEditItem}
+                            onSubmitOrder={handleSubmitOrder}
+                        />
 
-                {selectedItem && (
-                    <ItemModal
-                        selectedItem={selectedItem}
-                        editingItem={editingCartItem}
-                        addons={addons}
-                        options={options}
-                        onClose={handleCloseModal}
-                        onConfirmSelection={handleConfirmSelection}
-                    />
+                        {selectedItem && (
+                            <ItemModal
+                                selectedItem={selectedItem}
+                                editingItem={editingCartItem}
+                                addons={addons}
+                                options={options}
+                                onClose={handleCloseModal}
+                                onConfirmSelection={handleConfirmSelection}
+                            />
+                        )}
+                        
+                        <OrderQueryModal
+                            isOpen={isQueryModalOpen}
+                            onClose={() => setIsQueryModalOpen(false)}
+                        />
+
+                        <AdminDashboard 
+                            isOpen={isAdminDashboardOpen}
+                            onClose={() => setIsAdminDashboardOpen(false)}
+                            onPrintRequest={handlePrintRequest}
+                            onAvailabilityUpdate={fetchData}
+                        />
+                        
+                        <AIAssistantModal
+                            isOpen={isAiModalOpen}
+                            onClose={() => setIsAiModalOpen(false)}
+                            menuData={menuData}
+                            addons={addons}
+                        />
+
+                        <ConfirmationModal
+                            isOpen={!!confirmationData && !printContent}
+                            orderId={confirmationData?.orderId ?? null}
+                            lastSuccessfulOrder={confirmationData?.orderData ?? null}
+                            onClose={handleCloseConfirmation}
+                            onPrintRequest={handlePrintRequest}
+                        />
+                    </>
                 )}
-                
-                <OrderQueryModal
-                    isOpen={isQueryModalOpen}
-                    onClose={() => setIsQueryModalOpen(false)}
-                />
-
-                <AdminDashboard 
-                    isOpen={isAdminDashboardOpen}
-                    onClose={() => setIsAdminDashboardOpen(false)}
-                    onPrintRequest={handlePrintRequest}
-                    onAvailabilityUpdate={fetchData}
-                />
-                
-                <AIAssistantModal
-                    isOpen={isAiModalOpen}
-                    onClose={() => setIsAiModalOpen(false)}
-                    menuData={menuData}
-                    addons={addons}
-                />
-
-                <ConfirmationModal
-                    isOpen={!!confirmationData}
-                    orderId={confirmationData?.orderId ?? null}
-                    lastSuccessfulOrder={confirmationData?.orderData ?? null}
-                    onClose={handleCloseConfirmation}
-                    onPrintRequest={handlePrintRequest}
-                />
             </div>
         </>
     );
