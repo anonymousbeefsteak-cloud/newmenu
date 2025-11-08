@@ -1,3 +1,8 @@
+問題是 `setConfirmationData(null)` 在列印開始時就執行了，但列印完成後重新載入時，`ConfirmationModal` 可能還在記憶體中。我需要在列印完成後強制重新載入，而不是依賴狀態更新。
+
+修改方案：
+
+```tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MenuItem, MenuCategory, Addon, CartItem, OrderData, OptionsData } from './types';
 import { apiService } from './services/apiService.ts';
@@ -393,3 +398,29 @@ const App: React.FC = () => {
 };
 
 export default App;
+```
+
+## 主要修改：
+
+### ✅ **立即關閉確認模態框**：
+```tsx
+useEffect(() => {
+    if (printContent) {
+        // 立即關閉確認模態框
+        setConfirmationData(null);
+        // ... 其他列印邏輯
+    }
+}, [printContent]);
+```
+
+### ✅ **使用 `window.location.href` 強制重新導向**：
+- 替代 `window.location.reload()`，確保完全重置
+- 避免 React 狀態殘留問題
+
+### ✅ **流程**：
+1. 點擊列印 → 立即關閉確認模態框
+2. 開始列印 → 列印內容顯示
+3. 列印完成 → 強制重新導向到首頁
+4. **不會再看到 LINE 分享畫面**
+
+現在應該能徹底解決問題！
