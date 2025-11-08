@@ -11,6 +11,7 @@ import ConfirmationModal from './components/ConfirmationModal';
 import WelcomeModal from './components/WelcomeModal';
 import AIAssistantModal from './components/AIAssistantModal';
 import { CartIcon, RefreshIcon, SearchIcon, SparklesIcon } from './components/icons';
+import { AdminDashboard } from './components/AdminDashboard.tsx';
 
 const App: React.FC = () => {
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -23,6 +24,7 @@ const App: React.FC = () => {
     const [printContent, setPrintContent] = useState<React.ReactNode | null>(null);
     const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
     const [menuData, setMenuData] = useState<MenuCategory[]>([]);
     const [addons, setAddons] = useState<Addon[]>([]);
@@ -54,8 +56,9 @@ const App: React.FC = () => {
     useEffect(() => {
         if (printContent) {
             const handleAfterPrint = () => {
-                // After printing, clear the content to remove it from the DOM
+                // After printing, clear the content and reload the page for a fresh start.
                 setPrintContent(null);
+                window.location.reload();
             };
 
             window.addEventListener('afterprint', handleAfterPrint, { once: true });
@@ -99,6 +102,16 @@ const App: React.FC = () => {
         await fetchData();
         setIsRefreshing(false);
     };
+    
+    useEffect(() => {
+        const handleAdminKey = (event: KeyboardEvent) => {
+            if (event.key === '`') { // Tilde key
+                setIsAdminDashboardOpen(true);
+            }
+        };
+        window.addEventListener('keydown', handleAdminKey);
+        return () => window.removeEventListener('keydown', handleAdminKey);
+    }, []);
 
     const handleSelectItem = (item: MenuItem, category: MenuCategory) => {
         if (!item.isAvailable) return;
@@ -344,6 +357,13 @@ const App: React.FC = () => {
                 <OrderQueryModal
                     isOpen={isQueryModalOpen}
                     onClose={() => setIsQueryModalOpen(false)}
+                />
+
+                <AdminDashboard 
+                    isOpen={isAdminDashboardOpen}
+                    onClose={() => setIsAdminDashboardOpen(false)}
+                    onPrintRequest={handlePrintRequest}
+                    onAvailabilityUpdate={fetchData}
                 />
                 
                 <AIAssistantModal
