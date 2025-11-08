@@ -24,18 +24,24 @@ const renderPrintableItem = (item: CartItem) => {
 
     return (
         <tr key={item.cartId}>
-            <td className="align-top pr-4 font-black text-5xl">{item.quantity}x</td>
-            <td className="align-top w-full">
-                <span className="font-black text-5xl block">{item.item.name.replace(/半全餐|半套餐/g, '套餐')}</span>
+            <td className="align-top pr-3 font-black text-5xl" style={{ width: '15%' }}>
+                {item.quantity}x
+            </td>
+            <td className="align-top" style={{ width: '65%' }}>
+                <span className="font-black text-5xl block leading-tight">
+                    {item.item.name.replace(/半全餐|半套餐/g, '套餐')}
+                </span>
                 {details.length > 0 && (
-                    <div className="text-4xl font-bold pl-4 mt-1">
+                    <div className="text-4xl font-bold pl-2 mt-1">
                         {details.map((detail, i) => (
-                            <div key={i} className="leading-tight">• {detail}</div>
+                            <div key={i} className="leading-tight break-words">• {detail}</div>
                         ))}
                     </div>
                 )}
             </td>
-            <td className="align-top pl-4 text-right font-black text-5xl">{item.totalPrice}</td>
+            <td className="align-top pl-3 text-right font-black text-5xl" style={{ width: '20%' }}>
+                {item.totalPrice}
+            </td>
         </tr>
     );
 };
@@ -49,8 +55,8 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
     const createdAt = 'createdAt' in order && order.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString();
     
     return (
-        // 大幅增加字體大小，使用更粗的字重
-        <div className="p-4 bg-white text-5xl text-black" style={{ width: '320px', margin: '0 auto', lineHeight: '1.2' }}>
+        // 增加整體寬度，調整欄位比例
+        <div className="p-4 bg-white text-5xl text-black" style={{ width: '350px', margin: '0 auto', lineHeight: '1.2' }}>
             <div className="text-center space-y-2 mb-4">
                 <h3 className="text-6xl font-black leading-tight">無名牛排</h3>
                 <p className="text-5xl font-black leading-tight">廚房工作單</p>
@@ -77,12 +83,12 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
             
             <p className="text-center text-4xl my-2">────────────────</p>
             
-            <table className="w-full my-3 text-4xl">
+            <table className="w-full my-3 text-4xl" style={{ tableLayout: 'fixed' }}>
                 <thead>
                     <tr>
-                        <th className="font-black text-left pb-2">數量</th>
-                        <th className="font-black text-left pb-2">品項</th>
-                        <th className="font-black text-right pb-2">小計</th>
+                        <th className="font-black text-left pb-2" style={{ width: '15%' }}>數量</th>
+                        <th className="font-black text-left pb-2" style={{ width: '65%' }}>品項</th>
+                        <th className="font-black text-right pb-2" style={{ width: '20%' }}>小計</th>
                     </tr>
                 </thead>
                 <tbody>
