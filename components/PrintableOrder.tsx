@@ -1,9 +1,4 @@
-問題是 `setConfirmationData(null)` 在列印開始時就執行了，但列印完成後重新載入時，`ConfirmationModal` 可能還在記憶體中。我需要在列印完成後強制重新載入，而不是依賴狀態更新。
-
-修改方案：
-
-```tsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { MenuItem, MenuCategory, Addon, CartItem, OrderData, OptionsData } from './types';
 import { apiService } from './services/apiService.ts';
 import { MENU_DATA, ADDONS } from './constants';
@@ -37,6 +32,9 @@ const App: React.FC = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [notification, setNotification] = useState<string | null>(null);
 
+    // 使用 ref 來追蹤是否正在列印
+    const isPrintingRef = useRef(false);
+
     const fetchData = useCallback(async () => {
         setNotification(null);
         const { menu, addons, options: apiOptions, from } = await apiService.getMenuAndAddons();
@@ -59,13 +57,23 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (printContent) {
-            // 立即關閉確認模態框
-            setConfirmationData(null);
+            // 標記正在列印
+            isPrintingRef.current = true;
             
+            // 立即強制關閉所有模態框
+            setConfirmationData(null);
+            setIsCartOpen(false);
+            setSelectedItem(null);
+            setEditingCartItem(null);
+            setIsQueryModalOpen(false);
+            setIsAiModalOpen(false);
+            setIsAdminDashboardOpen(false);
+
             const handleAfterPrint = () => {
+                isPrintingRef.current = false;
                 setPrintContent(null);
-                // 強制重新載入，確保完全重置
-                window.location.href = window.location.origin + window.location.pathname;
+                // 使用 replace 避免回到歷史記錄
+                window.location.replace(window.location.origin + window.location.pathname);
             };
 
             window.addEventListener('afterprint', handleAfterPrint, { once: true });
@@ -74,12 +82,13 @@ const App: React.FC = () => {
                 window.print();
             }, 100);
 
-            // 備用方案：如果 afterprint 事件沒觸發，5秒後強制重新載入
+            // 備用方案：如果 afterprint 事件沒觸發，3秒後強制重新載入
             const backupTimer = setTimeout(() => {
                 window.removeEventListener('afterprint', handleAfterPrint);
+                isPrintingRef.current = false;
                 setPrintContent(null);
-                window.location.href = window.location.origin + window.location.pathname;
-            }, 5000);
+                window.location.replace(window.location.origin + window.location.pathname);
+            }, 3000);
 
             return () => {
                 clearTimeout(timer);
@@ -270,7 +279,7 @@ const App: React.FC = () => {
     const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
 
     const handleCloseConfirmation = () => {
-        window.location.href = window.location.origin + window.location.pathname;
+        window.location.replace(window.location.origin + window.location.pathname);
     }
 
     if (loading) {
@@ -290,60 +299,64 @@ const App: React.FC = () => {
 
             <div className="no-print">
                 {isWelcomeModalOpen && <WelcomeModal onAgree={handleWelcomeAgree} />}
-                <div className="min-h-screen bg-slate-100 text-slate-800">
-                    {notification && (
-                        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
-                            <p className="font-bold">{notification}</p>
-                        </div>
-                    )}
-                    <header className="bg-white shadow-md sticky top-0 z-20">
-                        <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-                            <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => setIsQueryModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
-                                    <SearchIcon className="h-4 w-4"/>
-                                    <span>查詢訂單</span>
-                                </button>
-                                <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium disabled:opacity-50">
-                                    <RefreshIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}/>
-                                    <span>{isRefreshing ? '刷新中' : '刷新'}</span>
-                                </button>
+                
+                {/* 如果正在列印，隱藏所有內容 */}
+                {!isPrintingRef.current && (
+                    <div className="min-h-screen bg-slate-100 text-slate-800">
+                        {notification && (
+                            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
+                                <p className="font-bold">{notification}</p>
                             </div>
-                        </div>
-                    </header>
+                        )}
+                        <header className="bg-white shadow-md sticky top-0 z-20">
+                            <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setIsQueryModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
+                                        <SearchIcon className="h-4 w-4"/>
+                                        <span>查詢訂單</span>
+                                    </button>
+                                    <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium disabled:opacity-50">
+                                        <RefreshIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}/>
+                                        <span>{isRefreshing ? '刷新中' : '刷新'}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </header>
 
-                    <main className="container mx-auto p-4 md:p-6 lg:p-8">
-                        <Menu menuData={menuData} onSelectItem={handleSelectItem} />
-                    </main>
+                        <main className="container mx-auto p-4 md:p-6 lg:p-8">
+                            <Menu menuData={menuData} onSelectItem={handleSelectItem} />
+                        </main>
 
-                    <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
-                        <div className="border-t border-slate-200 pt-8 space-y-2">
-                            <p>＊店內最低消費為一份餐點</p>
-                            <p>＊不收服務費，用完餐請回收餐具</p>
-                            <p>＊用餐限九十分鐘請勿飲酒</p>
-                            <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
-                        </div>
-                    </footer>
+                        <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
+                            <div className="border-t border-slate-200 pt-8 space-y-2">
+                                <p>＊店內最低消費為一份餐點</p>
+                                <p>＊不收服務費，用完餐請回收餐具</p>
+                                <p>＊用餐限九十分鐘請勿飲酒</p>
+                                <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
+                            </div>
+                        </footer>
 
-                    <button
-                        onClick={() => setIsAiModalOpen(true)}
-                        className="fixed bottom-24 right-6 lg:bottom-28 lg:right-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50 h-16 w-16"
-                        aria-label="開啟 AI 點餐小幫手"
-                    >
-                        <SparklesIcon className="h-8 w-8" />
-                    </button>
-
-                    {cartItemCount > 0 && (
                         <button
-                            onClick={() => setIsCartOpen(true)}
-                            className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 flex items-center justify-center bg-green-700 text-white rounded-full shadow-lg hover:bg-green-800 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 h-16 w-16"
-                            aria-label={`查看購物車，共有 ${cartItemCount} 項商品`}
+                            onClick={() => setIsAiModalOpen(true)}
+                            className="fixed bottom-24 right-6 lg:bottom-28 lg:right-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50 h-16 w-16"
+                            aria-label="開啟 AI 點餐小幫手"
                         >
-                            <CartIcon className="h-8 w-8" />
-                            <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{cartItemCount}</span>
+                            <SparklesIcon className="h-8 w-8" />
                         </button>
-                    )}
-                </div>
+
+                        {cartItemCount > 0 && (
+                            <button
+                                onClick={() => setIsCartOpen(true)}
+                                className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 flex items-center justify-center bg-green-700 text-white rounded-full shadow-lg hover:bg-green-800 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 h-16 w-16"
+                                aria-label={`查看購物車，共有 ${cartItemCount} 項商品`}
+                            >
+                                <CartIcon className="h-8 w-8" />
+                                <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{cartItemCount}</span>
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 <Cart
                     isOpen={isCartOpen}
@@ -398,29 +411,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-```
-
-## 主要修改：
-
-### ✅ **立即關閉確認模態框**：
-```tsx
-useEffect(() => {
-    if (printContent) {
-        // 立即關閉確認模態框
-        setConfirmationData(null);
-        // ... 其他列印邏輯
-    }
-}, [printContent]);
-```
-
-### ✅ **使用 `window.location.href` 強制重新導向**：
-- 替代 `window.location.reload()`，確保完全重置
-- 避免 React 狀態殘留問題
-
-### ✅ **流程**：
-1. 點擊列印 → 立即關閉確認模態框
-2. 開始列印 → 列印內容顯示
-3. 列印完成 → 強制重新導向到首頁
-4. **不會再看到 LINE 分享畫面**
-
-現在應該能徹底解決問題！
