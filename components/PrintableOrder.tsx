@@ -15,7 +15,7 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
     
     // 自動列印功能
     useEffect(() => {
-        const printAutomatically = () => {
+        const printAutomatically = async () => {
             // 設置列印樣式
             const printStyle = `
                 @media print {
@@ -26,6 +26,12 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
                     body {
                         margin: 0;
                         padding: 0;
+                        font-size: 36px !important;
+                        font-weight: bold !important;
+                    }
+                    * {
+                        font-size: 36px !important;
+                        font-weight: bold !important;
                     }
                     .no-print {
                         display: none !important;
@@ -38,10 +44,25 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
             style.innerHTML = printStyle;
             document.head.appendChild(style);
             
-            // 延遲後執行列印
-            setTimeout(() => {
+            let printCount = 0;
+            
+            const performPrint = () => {
                 window.print();
-            }, 500);
+                printCount++;
+                
+                if (printCount < 2) {
+                    // 列印第二份
+                    setTimeout(performPrint, 1000);
+                } else {
+                    // 兩份都印完後，延遲一下然後重新載入
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                }
+            };
+            
+            // 開始列印
+            setTimeout(performPrint, 500);
         };
         
         printAutomatically();
@@ -49,22 +70,22 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
     
     return (
         <div className="bg-white text-black" style={{ 
-            width: '280px', // 熱感紙寬度
+            width: '350px', 
             margin: '0 auto', 
             lineHeight: '1.2',
-            padding: '5px',
-            fontSize: '16px', // 調整為適合熱感紙的大小
+            padding: '10px',
+            fontSize: '36px',
             fontWeight: 'bold',
             fontFamily: 'Arial, sans-serif'
         }}>
             {/* 單號和餐點內容標題 */}
-            <div style={{ marginBottom: '8px', textAlign: 'center' }}>
+            <div style={{ marginBottom: '15px', textAlign: 'center' }}>
                 單號: {finalOrderId} 餐點內容 -
             </div>
 
             {/* 餐點總計 */}
             <div style={{ 
-                marginBottom: '8px', 
+                marginBottom: '15px', 
                 textAlign: 'center'
             }}>
                 餐點總計: ${2237}
@@ -72,7 +93,7 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
 
             {/* 小計標題 */}
             <div style={{ 
-                marginBottom: '8px', 
+                marginBottom: '15px', 
                 textAlign: 'center'
             }}>
                 小計
@@ -80,13 +101,13 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
 
             {/* 餐點項目 */}
             <div style={{ 
-                marginBottom: '8px'
+                marginBottom: '15px'
             }}>
-                <div style={{ marginBottom: '5px' }}>
+                <div style={{ marginBottom: '10px' }}>
                     板腱牛排+脆皮炸雞(炸魚)套餐 x3($1737)
                 </div>
                 <div style={{ 
-                    marginBottom: '5px',
+                    marginBottom: '10px',
                     textAlign: 'center'
                 }}>
                     數量
@@ -98,35 +119,35 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
 
             {/* 分隔線 */}
             <div style={{ 
-                margin: '8px 0', 
+                margin: '15px 0', 
                 textAlign: 'center',
-                borderTop: '1px solid black',
-                paddingTop: '5px'
+                borderTop: '2px solid black',
+                paddingTop: '10px'
             }}>
                 - 總計列表 -
             </div>
 
             {/* 炸物總計 */}
-            <div style={{ marginBottom: '6px' }}>
-                <div style={{ marginBottom: '3px' }}>炸物總計:</div>
-                <div style={{ paddingLeft: '10px' }}>
+            <div style={{ marginBottom: '12px' }}>
+                <div style={{ marginBottom: '6px' }}>炸物總計:</div>
+                <div style={{ paddingLeft: '20px' }}>
                     <div>- 炸魚 x3</div>
                 </div>
             </div>
 
             {/* 飲料總計 */}
-            <div style={{ marginBottom: '6px' }}>
-                <div style={{ marginBottom: '3px' }}>飲料總計:</div>
-                <div style={{ paddingLeft: '10px' }}>
+            <div style={{ marginBottom: '12px' }}>
+                <div style={{ marginBottom: '6px' }}>飲料總計:</div>
+                <div style={{ paddingLeft: '20px' }}>
                     <div>- 無糖紅茶 x3</div>
                     <div>- 冰涼可樂 x2</div>
                 </div>
             </div>
 
             {/* 醬料總計 */}
-            <div style={{ marginBottom: '6px' }}>
-                <div style={{ marginBottom: '3px' }}>醬料總計:</div>
-                <div style={{ paddingLeft: '10px' }}>
+            <div style={{ marginBottom: '12px' }}>
+                <div style={{ marginBottom: '6px' }}>醬料總計:</div>
+                <div style={{ paddingLeft: '20px' }}>
                     <div>- 泡菜 x4</div>
                     <div>- 生蒜片 x2</div>
                     <div>- 黑胡椒 x2</div>
@@ -136,9 +157,9 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
             </div>
 
             {/* 加購總計 */}
-            <div style={{ marginBottom: '6px' }}>
-                <div style={{ marginBottom: '3px' }}>加購總計:</div>
-                <div style={{ paddingLeft: '10px' }}>
+            <div style={{ marginBottom: '12px' }}>
+                <div style={{ marginBottom: '6px' }}>加購總計:</div>
+                <div style={{ paddingLeft: '20px' }}>
                     <div>- 豬排加購 5oz x2</div>
                 </div>
             </div>
