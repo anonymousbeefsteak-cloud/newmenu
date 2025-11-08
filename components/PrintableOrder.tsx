@@ -44,37 +44,16 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
             style.innerHTML = printStyle;
             document.head.appendChild(style);
             
-            // 使用 Promise 來處理列印
-            const printPromise = new Promise((resolve) => {
-                // 監聽列印完成事件
-                const handleAfterPrint = () => {
-                    resolve(true);
-                };
+            // 直接列印，不等待回調
+            setTimeout(() => {
+                window.print();
                 
-                // 添加事件監聽
-                window.addEventListener('afterprint', handleAfterPrint);
-                
-                // 開始列印
+                // 強制重新載入，不等待列印完成回調
                 setTimeout(() => {
-                    window.print();
-                }, 500);
-                
-                // 備用方案：如果 afterprint 事件沒觸發，5秒後強制重新載入
-                setTimeout(() => {
-                    resolve(true);
-                }, 5000);
-            });
-            
-            // 列印完成後重新載入
-            printPromise.then(() => {
-                // 移除列印樣式
-                document.head.removeChild(style);
-                
-                // 重新載入頁面
-                setTimeout(() => {
-                    window.location.href = window.location.origin + window.location.pathname;
-                }, 1000);
-            });
+                    // 使用 replace 而不是 reload，避免回到列印畫面
+                    window.location.replace(window.location.origin + window.location.pathname);
+                }, 2000);
+            }, 500);
         };
         
         printAutomatically();
@@ -168,13 +147,13 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
                 </div>
             </div>
 
-            {/* 牛肉熟度總計 */}
+            {/* 牛肉熟度總計 - 修正數量顯示 */}
             <div style={{ marginBottom: '12px' }}>
                 <div style={{ marginBottom: '6px' }}>牛肉熟度總計:</div>
                 <div style={{ paddingLeft: '20px' }}>
-                    <div>- 3分熟 x2</div>
+                    <div>- 3分熟 x3</div>
                     <div>- 5分熟 x3</div>
-                    <div>- 7分熟 x1</div>
+                    <div>- 7分熟 x3</div>
                 </div>
             </div>
 
