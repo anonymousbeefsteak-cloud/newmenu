@@ -11,6 +11,7 @@ import WelcomeModal from './components/WelcomeModal';
 import AIAssistantModal from './components/AIAssistantModal';
 import { CartIcon, RefreshIcon, SearchIcon, SparklesIcon } from './components/icons';
 import { AdminDashboard } from './components/AdminDashboard.tsx';
+import { PrintableOrder } from './components/PrintableOrder';
 
 const App: React.FC = () => {
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -54,25 +55,34 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (printContent) {
-            // 立即強制重新載入，不等待列印完成
-            const reloadTimer = setTimeout(() => {
-                window.location.replace(window.location.origin + window.location.pathname);
+            const handleAfterPrint = () => {
+                setPrintContent(null);
+                // 列印完成後重新載入
+                window.location.reload();
+            };
+
+            window.addEventListener('afterprint', handleAfterPrint, { once: true });
+            
+            const timer = setTimeout(() => {
+                window.print();
             }, 100);
 
-            const printTimer = setTimeout(() => {
-                window.print();
-            }, 50);
+            // 備用方案：如果 afterprint 事件沒觸發，5秒後強制重新載入
+            const backupTimer = setTimeout(() => {
+                window.removeEventListener('afterprint', handleAfterPrint);
+                setPrintContent(null);
+                window.location.reload();
+            }, 5000);
 
             return () => {
-                clearTimeout(reloadTimer);
-                clearTimeout(printTimer);
+                clearTimeout(timer);
+                clearTimeout(backupTimer);
+                window.removeEventListener('afterprint', handleAfterPrint);
             };
         }
     }, [printContent]);
 
     const handlePrintRequest = (content: React.ReactNode) => {
-        // 立即清除確認數據
-        setConfirmationData(null);
         setPrintContent(content);
     };
 
@@ -239,7 +249,10 @@ const App: React.FC = () => {
         if (result.success && result.orderId) {
             setCart([]);
             setIsCartOpen(false);
-            setConfirmationData({ orderId: result.orderId, orderData });
+            
+            // 直接列印，不顯示確認畫面
+            const printContent = <PrintableOrder order={orderData} orderId={result.orderId} />;
+            handlePrintRequest(printContent);
 
             const savedOrders = JSON.parse(localStorage.getItem('steakhouse-orders') || '[]');
             if (!savedOrders.includes(result.orderId)) {
@@ -251,10 +264,6 @@ const App: React.FC = () => {
     };
     
     const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
-
-    const handleCloseConfirmation = () => {
-        window.location.replace(window.location.origin + window.location.pathname);
-    }
 
     if (loading) {
         return (
@@ -373,14 +382,6 @@ const App: React.FC = () => {
                             onClose={() => setIsAiModalOpen(false)}
                             menuData={menuData}
                             addons={addons}
-                        />
-
-                        <ConfirmationModal
-                            isOpen={!!confirmationData && !printContent}
-                            orderId={confirmationData?.orderId ?? null}
-                            lastSuccessfulOrder={confirmationData?.orderData ?? null}
-                            onClose={handleCloseConfirmation}
-                            onPrintRequest={handlePrintRequest}
                         />
                     </>
                 )}
