@@ -82,8 +82,9 @@ const App: React.FC = () => {
 
     const handlePrintRequest = (content: React.ReactNode) => {
         setPrintContent(content);
+        // 列印後關閉確認模態框
+        setConfirmationData(null);
     };
-
 
     useEffect(() => {
         const initialLoad = async () => {
