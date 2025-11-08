@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MenuItem, MenuCategory, Addon, CartItem, OrderData, OptionsData } from './types';
 import { apiService } from './services/apiService.ts';
@@ -55,17 +54,28 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (printContent) {
-            // A short delay ensures the content is rendered before the print dialog appears.
-            const timer = setTimeout(() => {
-                window.print();
-                // Since window.print() is blocking, this code will execute after the print dialog is closed.
-                // This is a more reliable method than using the 'afterprint' event.
+            const handleAfterPrint = () => {
                 setPrintContent(null);
                 window.location.reload();
+            };
+
+            window.addEventListener('afterprint', handleAfterPrint, { once: true });
+            
+            const timer = setTimeout(() => {
+                window.print();
             }, 100);
+
+            // 備用方案：如果 afterprint 事件沒觸發，8秒後強制重新載入
+            const backupTimer = setTimeout(() => {
+                window.removeEventListener('afterprint', handleAfterPrint);
+                setPrintContent(null);
+                window.location.reload();
+            }, 8000);
 
             return () => {
                 clearTimeout(timer);
+                clearTimeout(backupTimer);
+                window.removeEventListener('afterprint', handleAfterPrint);
             };
         }
     }, [printContent]);
@@ -252,7 +262,6 @@ const App: React.FC = () => {
     const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
 
     const handleCloseConfirmation = () => {
-        // Reload the page to reset the entire application for a new order.
         window.location.reload();
     }
 
