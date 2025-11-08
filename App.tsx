@@ -6,10 +6,11 @@ import Menu from './components/Menu';
 import ItemModal from './components/ItemModal';
 import Cart from './components/Cart';
 import OrderQueryModal from './components/OrderQueryModal';
-import ConfirmationModal from './components/ConfirmationModal';
 import WelcomeModal from './components/WelcomeModal';
 import AIAssistantModal from './components/AIAssistantModal';
 import { CartIcon, RefreshIcon, SearchIcon, SparklesIcon } from './components/icons';
+import { AdminDashboard } from './components/AdminDashboard.tsx';
+import { PrintableOrder } from './components/PrintableOrder';
 
 const App: React.FC = () => {
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -18,10 +19,10 @@ const App: React.FC = () => {
     const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
     const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
     const [isEditingFromCart, setIsEditingFromCart] = useState(false);
-    const [confirmationData, setConfirmationData] = useState<{ orderId: string; orderData: OrderData } | null>(null);
     const [printContent, setPrintContent] = useState<React.ReactNode | null>(null);
     const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
     const [menuData, setMenuData] = useState<MenuCategory[]>([]);
     const [addons, setAddons] = useState<Addon[]>([]);
@@ -52,19 +53,16 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (printContent) {
-            const handleAfterPrint = () => {
-                setPrintContent(null);
-            };
-
-            window.addEventListener('afterprint', handleAfterPrint, { once: true });
-            
+            // A short delay ensures the content is rendered before the print dialog appears.
             const timer = setTimeout(() => {
                 window.print();
-            }, 100); 
+                // After the blocking print dialog is closed, this code will execute.
+                setPrintContent(null);
+                window.location.reload();
+            }, 100);
 
             return () => {
                 clearTimeout(timer);
-                window.removeEventListener('afterprint', handleAfterPrint);
             };
         }
     }, [printContent]);
@@ -96,6 +94,16 @@ const App: React.FC = () => {
         await fetchData();
         setIsRefreshing(false);
     };
+    
+    useEffect(() => {
+        const handleAdminKey = (event: KeyboardEvent) => {
+            if (event.key === '`') { // Tilde key
+                setIsAdminDashboardOpen(true);
+            }
+        };
+        window.addEventListener('keydown', handleAdminKey);
+        return () => window.removeEventListener('keydown', handleAdminKey);
+    }, []);
 
     const handleSelectItem = (item: MenuItem, category: MenuCategory) => {
         if (!item.isAvailable) return;
@@ -227,7 +235,9 @@ const App: React.FC = () => {
         if (result.success && result.orderId) {
             setCart([]);
             setIsCartOpen(false);
-            setConfirmationData({ orderId: result.orderId, orderData });
+            
+            // On success, trigger the print dialog. The useEffect for `printContent` will handle the rest.
+            handlePrintRequest(<PrintableOrder order={orderData} orderId={result.orderId} />);
 
             const savedOrders = JSON.parse(localStorage.getItem('steakhouse-orders') || '[]');
             if (!savedOrders.includes(result.orderId)) {
@@ -239,10 +249,6 @@ const App: React.FC = () => {
     };
     
     const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
-
-    const handleCloseConfirmation = () => {
-        setConfirmationData(null);
-    }
 
     if (loading) {
         return (
@@ -341,20 +347,19 @@ const App: React.FC = () => {
                     isOpen={isQueryModalOpen}
                     onClose={() => setIsQueryModalOpen(false)}
                 />
+
+                <AdminDashboard 
+                    isOpen={isAdminDashboardOpen}
+                    onClose={() => setIsAdminDashboardOpen(false)}
+                    onPrintRequest={handlePrintRequest}
+                    onAvailabilityUpdate={fetchData}
+                />
                 
                 <AIAssistantModal
                     isOpen={isAiModalOpen}
                     onClose={() => setIsAiModalOpen(false)}
                     menuData={menuData}
                     addons={addons}
-                />
-
-                <ConfirmationModal
-                    isOpen={!!confirmationData}
-                    orderId={confirmationData?.orderId ?? null}
-                    lastSuccessfulOrder={confirmationData?.orderData ?? null}
-                    onClose={handleCloseConfirmation}
-                    onPrintRequest={handlePrintRequest}
                 />
             </div>
         </>
