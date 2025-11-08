@@ -52,48 +52,41 @@ const App: React.FC = () => {
         }
     }, []);
     
-    // ==================== 全新列印系統（重點） ====================
+    useEffect(() => {
+        if (printContent) {
+            // 立即關閉確認模態框
+            setConfirmationData(null);
+            
+            const handleAfterPrint = () => {
+                setPrintContent(null);
+                // 強制重新載入，確保完全重置
+                window.location.href = window.location.origin + window.location.pathname;
+            };
+
+            window.addEventListener('afterprint', handleAfterPrint, { once: true });
+            
+            const timer = setTimeout(() => {
+                window.print();
+            }, 100);
+
+            // 備用方案：如果 afterprint 事件沒觸發，5秒後強制重新載入
+            const backupTimer = setTimeout(() => {
+                window.removeEventListener('afterprint', handleAfterPrint);
+                setPrintContent(null);
+                window.location.href = window.location.origin + window.location.pathname;
+            }, 5000);
+
+            return () => {
+                clearTimeout(timer);
+                clearTimeout(backupTimer);
+                window.removeEventListener('afterprint', handleAfterPrint);
+            };
+        }
+    }, [printContent]);
+
     const handlePrintRequest = (content: React.ReactNode) => {
         setPrintContent(content);
-        setConfirmationData(null); // 立即關閉確認視窗
     };
-
-    useEffect(() => {
-        if (!printContent) return;
-
-        const cleanupAndReload = () => {
-            setPrintContent(null);
-            setTimeout(() => {
-                window.location.reload();
-            }, 300);
-        };
-
-        const handleAfterPrint = () => cleanupAndReload();
-        const handleFocus = () => cleanupAndReload();
-
-        window.addEventListener('afterprint', handleAfterPrint);
-        window.addEventListener('focus', handleFocus);
-
-        // 強制備援：5秒內不管怎樣都重載
-        const forceReloadTimer = setTimeout(() => {
-            window.removeEventListener('afterprint', handleAfterPrint);
-            window.removeEventListener('focus', handleFocus);
-            cleanupAndReload();
-        }, 5000);
-
-        // 開始列印
-        const printTimer = setTimeout(() => {
-            window.print();
-        }, 150);
-
-        return () => {
-            clearTimeout(printTimer);
-            clearTimeout(forceReloadTimer);
-            window.removeEventListener('afterprint', handleAfterPrint);
-            window.removeEventListener('focus', handleFocus);
-        };
-    }, [printContent]);
-    // ============================================================
 
     useEffect(() => {
         const initialLoad = async () => {
@@ -120,7 +113,7 @@ const App: React.FC = () => {
     
     useEffect(() => {
         const handleAdminKey = (event: KeyboardEvent) => {
-            if (event.key === '`') {
+            if (event.key === '`') { // Tilde key
                 setIsAdminDashboardOpen(true);
             }
         };
@@ -230,7 +223,6 @@ const App: React.FC = () => {
         if (isEditingFromCart) {
             setIsCartOpen(true);
         }
-        handleCloseModal();
     };
     
     const handleUpdateQuantity = (cartId: string, newQuantity: number) => {
@@ -273,7 +265,7 @@ const App: React.FC = () => {
     const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
 
     const handleCloseConfirmation = () => {
-        window.location.reload();
+        window.location.href = window.location.origin + window.location.pathname;
     }
 
     if (loading) {
@@ -287,33 +279,18 @@ const App: React.FC = () => {
 
     return (
         <>
-            {/* 列印區域 */}
-            <div className="print-area hidden">
-                {printContent}
+            <div className="print-area">
+              {printContent}
             </div>
-
-            {/* 列印中遮罩 */}
-            {printContent && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 z-[9999] flex items-center justify-center">
-                    <div className="bg-white rounded-2xl p-10 text-center shadow-2xl max-w-sm animate-pulse">
-                        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-600 mx-auto mb-6"></div>
-                        <p className="text-xl font-bold text-gray-800">準備列印中...</p>
-                        <p className="text-sm text-gray-600 mt-3">請稍候，列印完成後將自動重新整理</p>
-                        <p className="text-xs text-gray-500 mt-4">（若無反應，請手動按「列印」或「取消」）</p>
-                    </div>
-                </div>
-            )}
 
             <div className="no-print">
                 {isWelcomeModalOpen && <WelcomeModal onAgree={handleWelcomeAgree} />}
-                
                 <div className="min-h-screen bg-slate-100 text-slate-800">
                     {notification && (
                         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
                             <p className="font-bold">{notification}</p>
                         </div>
                     )}
-                    
                     <header className="bg-white shadow-md sticky top-0 z-20">
                         <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
                             <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
@@ -336,10 +313,10 @@ const App: React.FC = () => {
 
                     <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
                         <div className="border-t border-slate-200 pt-8 space-y-2">
-                            <p>店內最低消費為一份餐點</p>
-                            <p>不收服務費，用完餐請回收餐具</p>
-                            <p>用餐限九十分鐘請勿飲酒</p>
-                            <p>餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
+                            <p>＊店內最低消費為一份餐點</p>
+                            <p>＊不收服務費，用完餐請回收餐具</p>
+                            <p>＊用餐限九十分鐘請勿飲酒</p>
+                            <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
                         </div>
                     </footer>
 
