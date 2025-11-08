@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import type { Order, CartItem, OrderData } from '../types';
+import React, { useMemo } from 'react';
+import type { Order, OrderData, CartItem, SelectedSauce } from '../types';
 
 type PrintableOrderProps = {
     order: Order | OrderData | null;
@@ -10,127 +10,119 @@ export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }
     if (!order) {
         return null;
     }
+
+    // Merge items with the same configuration to show a consolidated list
+    const mergedItems = useMemo(() => {
+        if (!order?.items) return [];
+
+        const itemMap = new Map<string, CartItem>();
+        order.items.forEach(cartItem => {
+            const key = cartItem.cartKey;
+            const existing = itemMap.get(key);
+            
+            if (existing) {
+                const newQuantity = existing.quantity + cartItem.quantity;
+                const singleChoicePrice = existing.selectedSingleChoiceAddon && existing.item.customizations.singleChoiceAddon ? existing.item.customizations.singleChoiceAddon.price : 0;
+                const totalAddonPrice = (existing.selectedAddons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                const newTotalPrice = (existing.item.price + singleChoicePrice) * newQuantity + totalAddonPrice;
+                
+                itemMap.set(key, { ...existing, quantity: newQuantity, totalPrice: newTotalPrice });
+            } else {
+                itemMap.set(key, { ...cartItem });
+            }
+        });
+        return Array.from(itemMap.values());
+    }, [order?.items]);
+
+    // Calculate the total summary of all options across all items in the order
+    const summary = useMemo(() => {
+        if (!order?.items) return {};
+        const donenesses: { [key: string]: number } = {};
+        const sauces: { [key: string]: number } = {};
+        const drinks: { [key: string]: number } = {};
+        const desserts: { [key: string]: number } = {};
+        const pastas: { [key: string]: number } = {};
+        const components: { [key: string]: number } = {};
+        const sideChoices: { [key: string]: number } = {};
+        const addons: { [key: string]: number } = {};
+
+        order.items.forEach(cartItem => {
+            if (cartItem.selectedDonenesses) Object.entries(cartItem.selectedDonenesses).forEach(([name, quantity]) => donenesses[name] = (donenesses[name] || 0) + Number(quantity));
+            if (cartItem.selectedDrinks) Object.entries(cartItem.selectedDrinks).forEach(([name, quantity]) => drinks[name] = (drinks[name] || 0) + Number(quantity));
+            if (cartItem.selectedSauces) (cartItem.selectedSauces as SelectedSauce[]).forEach(sauce => sauces[sauce.name] = (sauces[sauce.name] || 0) + Number(sauce.quantity));
+            if (cartItem.selectedDesserts) cartItem.selectedDesserts.forEach(dessert => desserts[dessert.name] = (desserts[dessert.name] || 0) + Number(dessert.quantity));
+            if (cartItem.selectedPastas) cartItem.selectedPastas.forEach(pasta => pastas[pasta.name] = (pastas[pasta.name] || 0) + Number(pasta.quantity));
+            if (cartItem.selectedComponent) Object.entries(cartItem.selectedComponent).forEach(([name, quantity]) => components[name] = (components[name] || 0) + Number(quantity));
+            if (cartItem.selectedSideChoices) Object.entries(cartItem.selectedSideChoices).forEach(([name, quantity]) => sideChoices[name] = (sideChoices[name] || 0) + Number(quantity));
+            if (cartItem.selectedAddons) cartItem.selectedAddons.forEach(addon => addons[addon.name] = (addons[addon.name] || 0) + Number(addon.quantity));
+        });
+        
+        const result: { [key: string]: { [key: string]: number } } = { donenesses, components, drinks, sideChoices, sauces, desserts, pastas, addons };
+        
+        Object.keys(result).forEach(key => {
+            if (Object.keys(result[key]).length === 0) {
+                delete result[key];
+            }
+        });
+        return result;
+    }, [order?.items]);
+
+    const summaryTitles: { [key: string]: string } = {
+        donenesses: "熟度總計",
+        components: "炸物總計",
+        drinks: "飲料總計",
+        sideChoices: "簡餐附餐總計",
+        sauces: "醬料總計",
+        desserts: "甜品總計",
+        pastas: "義麵總計",
+        addons: "加購總計",
+    };
+    
+    // Defines the order in which summary sections will appear on the ticket
+    const summaryOrder = ['donenesses', 'components', 'drinks', 'sideChoices', 'sauces', 'desserts', 'pastas', 'addons'];
     
     const finalOrderId = 'id' in order ? order.id : orderId;
-    
-    // 自動列印功能 - 最簡單的方法
-    useEffect(() => {
-        // 直接列印，讓使用者手動關閉列印預覽
-        setTimeout(() => {
-            window.print();
-        }, 500);
-        
-        // 不自動重新載入，讓使用者手動操作
-    }, []);
-    
+    const separator = (text: string) => <p className="text-center font-bold my-2">- {text} -</p>;
+
     return (
-        <div className="bg-white text-black" style={{ 
-            width: '350px', 
-            margin: '0 auto', 
-            lineHeight: '1.2',
-            padding: '10px',
-            fontSize: '36px',
-            fontWeight: 'bold',
-            fontFamily: 'Arial, sans-serif'
-        }}>
-            {/* 單號和餐點內容標題 */}
-            <div style={{ marginBottom: '15px', textAlign: 'center' }}>
-                單號: {finalOrderId} 餐點內容 -
+        <div className="p-2 bg-white text-black" style={{ width: '280px', margin: '0 auto', fontFamily: 'monospace', fontSize: '20px', lineHeight: '1.5' }}>
+            <div className="font-bold">
+                {finalOrderId && <p>單號: {finalOrderId.slice(-6)} 餐點內容 -</p>}
+                <p>餐點總計:${order.totalPrice}</p>
             </div>
+            
+            <hr className="border-black border-dashed my-2" />
 
-            {/* 餐點總計 */}
-            <div style={{ 
-                marginBottom: '15px', 
-                textAlign: 'center'
-            }}>
-                餐點總計: $2237
+            <div className="my-2 space-y-1">
+                {mergedItems.map((item) => (
+                    <div key={item.cartKey}>
+                        <p>
+                            {item.item.name.replace(/半全餐|半套餐/g, '套餐')} x{item.quantity} (${item.totalPrice})
+                        </p>
+                    </div>
+                ))}
             </div>
-
-            {/* 小計標題 */}
-            <div style={{ 
-                marginBottom: '15px', 
-                textAlign: 'center'
-            }}>
-                小計
-            </div>
-
-            {/* 餐點項目 */}
-            <div style={{ 
-                marginBottom: '15px'
-            }}>
-                <div style={{ marginBottom: '10px' }}>
-                    板腱牛排+脆皮炸雞(炸魚)套餐 x3($1737)
-                </div>
-                <div style={{ 
-                    marginBottom: '10px',
-                    textAlign: 'center'
-                }}>
-                    數量
-                </div>
-                <div>
-                    英式炸魚套餐 x2($500)
-                </div>
-            </div>
-
-            {/* 分隔線 */}
-            <div style={{ 
-                margin: '15px 0', 
-                textAlign: 'center',
-                borderTop: '2px solid black',
-                paddingTop: '10px'
-            }}>
-                - 總計列表 -
-            </div>
-
-            {/* 炸物總計 */}
-            <div style={{ marginBottom: '12px' }}>
-                <div style={{ marginBottom: '6px' }}>炸物總計:</div>
-                <div style={{ paddingLeft: '20px' }}>
-                    <div>- 炸魚 x3</div>
-                </div>
-            </div>
-
-            {/* 飲料總計 */}
-            <div style={{ marginBottom: '12px' }}>
-                <div style={{ marginBottom: '6px' }}>飲料總計:</div>
-                <div style={{ paddingLeft: '20px' }}>
-                    <div>- 無糖紅茶 x3</div>
-                    <div>- 冰涼可樂 x2</div>
-                </div>
-            </div>
-
-            {/* 醬料總計 */}
-            <div style={{ marginBottom: '12px' }}>
-                <div style={{ marginBottom: '6px' }}>醬料總計:</div>
-                <div style={{ paddingLeft: '20px' }}>
-                    <div>- 泡菜 x4</div>
-                    <div>- 生蒜片 x2</div>
-                    <div>- 黑胡椒 x2</div>
-                    <div>- 巴薩米克醋 x1</div>
-                    <div>- 蒜味醬 x1</div>
-                </div>
-            </div>
-
-            {/* 加購總計 */}
-            <div style={{ marginBottom: '12px' }}>
-                <div style={{ marginBottom: '6px' }}>加購總計:</div>
-                <div style={{ paddingLeft: '20px' }}>
-                    <div>- 豬排加購 5oz x2</div>
-                </div>
-            </div>
-
-            {/* 操作說明 */}
-            <div style={{ 
-                marginTop: '20px', 
-                padding: '10px',
-                border: '2px solid #666',
-                fontSize: '24px',
-                textAlign: 'center',
-                backgroundColor: '#f0f0f0'
-            }}>
-                <div>列印完成後，請關閉此視窗</div>
-                <div>或按瀏覽器的返回按鈕</div>
-            </div>
+            
+            {Object.keys(summary).length > 0 && (
+                <>
+                    {separator("總計列表")}
+                    <div className="my-2 space-y-2 font-semibold">
+                        {summaryOrder.map(key => {
+                             if (summary[key]) {
+                                return (
+                                    <div key={key}>
+                                        <p>{summaryTitles[key]}:</p>
+                                        {Object.entries(summary[key]).map(([name, quantity]) => (
+                                            <p key={name} className="pl-2">- {name} x{quantity}</p>
+                                        ))}
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })}
+                    </div>
+                </>
+            )}
         </div>
     );
 };
