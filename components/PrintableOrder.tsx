@@ -55,22 +55,17 @@ const App: React.FC = () => {
     
     useEffect(() => {
         if (printContent) {
-            const handleAfterPrint = () => {
-                // After printing, clear the content and reload the page for a fresh start.
-                setPrintContent(null);
-                window.location.reload();
-            };
-
-            window.addEventListener('afterprint', handleAfterPrint, { once: true });
-            
             // A short delay ensures the content is rendered before the print dialog appears.
             const timer = setTimeout(() => {
                 window.print();
-            }, 100); 
+                // Since window.print() is blocking, this code will execute after the print dialog is closed.
+                // This is a more reliable method than using the 'afterprint' event.
+                setPrintContent(null);
+                window.location.reload();
+            }, 100);
 
             return () => {
                 clearTimeout(timer);
-                window.removeEventListener('afterprint', handleAfterPrint);
             };
         }
     }, [printContent]);
