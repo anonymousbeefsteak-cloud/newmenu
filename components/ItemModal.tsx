@@ -1,333 +1,369 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import type {
-  MenuItem,
-  MenuCategory,
-  Addon,
-  SelectedAddon,
-  DonenessLevel,
-  SelectedSauce,
-  SelectedDessert,
-  SelectedPasta,
-  CartItem,
-  OptionsData
-} from '../types';
-import { DONENESS_LEVELS, DRINK_CHOICES } from '../constants';
-import { PlusIcon, MinusIcon, CloseIcon } from './icons';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { MenuItem, MenuCategory, Addon, CartItem, OrderData, OptionsData } from './types';
+import { apiService } from './services/apiService.ts';
+import { MENU_DATA, ADDONS } from './constants';
+import Menu from './components/Menu';
+import ItemModal from './components/ItemModal';
+import Cart from './components/Cart';
+import OrderQueryModal from './components/OrderQueryModal';
+import WelcomeModal from './components/WelcomeModal';
+import AIAssistantModal from './components/AIAssistantModal';
+import { CartIcon, RefreshIcon, SearchIcon, SparklesIcon } from './components/icons';
+import { AdminDashboard } from './components/AdminDashboard.tsx';
+import { PrintableOrder } from './components/PrintableOrder';
 
-interface ItemModalProps {
-  selectedItem: { item: MenuItem; category: MenuCategory };
-  editingItem: CartItem | null;
-  addons: Addon[];
-  options: OptionsData;
-  onClose: () => void;
-  onConfirmSelection: (item: MenuItem, quantity: number, options: any, category: MenuCategory) => void;
-}
+const App: React.FC = () => {
+    const [cart, setCart] = useState<CartItem[]>([]);
+    const [isCartOpen, setIsCartOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState<{ item: MenuItem, category: MenuCategory } | null>(null);
+    const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
+    const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
+    const [isEditingFromCart, setIsEditingFromCart] = useState(false);
+    const [printContent, setPrintContent] = useState<React.ReactNode | null>(null);
+    const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
-const ItemModal: React.FC<ItemModalProps> = ({ selectedItem, editingItem, addons: allAddons, options, onClose, onConfirmSelection }) => {
-  const { item, category } = selectedItem;
-  const custom = item.customizations;
+    const [menuData, setMenuData] = useState<MenuCategory[]>([]);
+    const [addons, setAddons] = useState<Addon[]>([]);
+    const [options, setOptions] = useState<OptionsData>({ sauces: [], dessertsA: [], dessertsB: [], pastasA: [], pastasB: [], coldNoodles: [] });
+    const [loading, setLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [notification, setNotification] = useState<string | null>(null);
 
-  const [quantity, setQuantity] = useState(1);
-  const [selectedDonenesses, setSelectedDonenesses] = useState<Partial<Record<DonenessLevel, number>>>({});
-  const [selectedSauces, setSelectedSauces] = useState<SelectedSauce[]>([]);
-  const [selectedDrinks, setSelectedDrinks] = useState<{ [key: string]: number }>({});
-  const [selectedDesserts, setSelectedDesserts] = useState<SelectedDessert[]>([]);
-  const [selectedPastas, setSelectedPastas] = useState<SelectedPasta[]>([]);
-  const [selectedComponent, setSelectedComponent] = useState<{ [key: string]: number }>({});
-  const [selectedSideChoices, setSelectedSideChoices] = useState<{ [key: string]: number }>({});
-  const [selectedMultiChoice, setSelectedMultiChoice] = useState<{ [key: string]: number }>({});
-  const [selectedSingleChoiceAddon, setSelectedSingleChoiceAddon] = useState<string | undefined>(undefined);
-  const [selectedNotes, setSelectedNotes] = useState('');
-  const [selectedAddons, setSelectedAddons] = useState<SelectedAddon[]>([]);
-  const [validationError, setValidationError] = useState<string | null>(null);
+    const fetchData = useCallback(async () => {
+        setNotification(null);
+        const { menu, addons, options: apiOptions, from } = await apiService.getMenuAndAddons();
 
-  // Initialize state from editingItem or reset for new item
-  useEffect(() => {
-    if (editingItem) {
-      setQuantity(editingItem.quantity);
-      setSelectedDonenesses(editingItem.selectedDonenesses || {});
-      setSelectedSauces(editingItem.selectedSauces || []);
-      setSelectedDrinks(editingItem.selectedDrinks || {});
-      setSelectedDesserts(editingItem.selectedDesserts || []);
-      setSelectedPastas(editingItem.selectedPastas || []);
-      setSelectedComponent(editingItem.selectedComponent || {});
-      setSelectedSideChoices(editingItem.selectedSideChoices || {});
-      setSelectedMultiChoice(editingItem.selectedMultiChoice || {});
-      setSelectedSingleChoiceAddon(editingItem.selectedSingleChoiceAddon);
-      setSelectedNotes(editingItem.selectedNotes || '');
-      setSelectedAddons(editingItem.selectedAddons || []);
-    } else {
-      setQuantity(1);
-      setSelectedDonenesses({});
-      setSelectedSauces([]);
-      setSelectedDrinks({});
-      setSelectedDesserts([]);
-      setSelectedPastas([]);
-      setSelectedComponent({});
-      setSelectedSideChoices({});
-      setSelectedMultiChoice({});
-      setSelectedSingleChoiceAddon(undefined);
-      setSelectedNotes('');
-      setSelectedAddons([]);
-    }
-  }, [editingItem]);
-
-  // Generic handler for simple key-value pair options
-  const handleOptionChange = (
-    setter: React.Dispatch<React.SetStateAction<{ [key: string]: number }>>,
-    name: string,
-    change: number,
-    limit: number
-  ) => {
-    setValidationError(null);
-    setter(prev => {
-      const currentCount = prev[name] || 0;
-      const newCount = Math.max(0, currentCount + change);
-      const totalCount = Object.values({ ...prev, [name]: newCount }).reduce((a, b) => a + b, 0);
-      if (totalCount > limit) return prev;
-      const newObject = { ...prev, [name]: newCount };
-      if (newCount === 0) delete newObject[name];
-      return newObject;
-    });
-  };
-
-  // Generic handler for options stored as an array of objects
-  const handleArrayOfObjectsChange = <T extends { name: string; quantity: number; }>(
-    setter: React.Dispatch<React.SetStateAction<T[]>>,
-    name: string,
-    change: number,
-    limit: number,
-    group?: string[]
-  ) => {
-    setValidationError(null);
-    setter(prev => {
-      const itemsToConsider = group ? prev.filter(item => group.includes(item.name)) : prev;
-      const totalCount = itemsToConsider.reduce((sum, item) => sum + item.quantity, 0);
-      const existingItem = prev.find(item => item.name === name);
-      const newQuantity = (existingItem?.quantity || 0) + change;
-
-      if (newQuantity > (existingItem?.quantity || 0) && totalCount >= limit) {
-        return prev;
-      }
-
-      if (newQuantity <= 0) {
-        return prev.filter(item => item.name !== name);
-      }
-      if (existingItem) {
-        return prev.map(item => item.name === name ? { ...item, quantity: newQuantity } : item) as T[];
-      }
-      return [...prev, { name, quantity: newQuantity } as T];
-    });
-  };
-
-  const handleAddonChange = (addon: Addon, change: number) => {
-    setSelectedAddons(prev => {
-      const existingAddon = prev.find(a => a.id === addon.id);
-      const newQuantity = (existingAddon?.quantity || 0) + change;
-      if (newQuantity <= 0) return prev.filter(a => a.id !== addon.id);
-      if (existingAddon) return prev.map(a => a.id === addon.id ? { ...a, quantity: newQuantity } : a);
-      return [...prev, { ...addon, quantity: newQuantity }];
-    });
-  };
-  
-  const totalPrice = useMemo(() => {
-    const singleChoicePrice = selectedSingleChoiceAddon && custom.singleChoiceAddon ? custom.singleChoiceAddon.price : 0;
-    const addonsPrice = selectedAddons.reduce((sum, addon) => sum + addon.price * addon.quantity, 0);
-    return (item.price + singleChoicePrice) * quantity + addonsPrice;
-  }, [item.price, quantity, selectedAddons, selectedSingleChoiceAddon, custom.singleChoiceAddon]);
-
-  // Counts for UI display
-  const donenessCount = useMemo(() => Object.values(selectedDonenesses).reduce((a, b) => a + (b || 0), 0), [selectedDonenesses]);
-  const sauceLimit = useMemo(() => (custom.saucesPerItem ? custom.saucesPerItem * quantity : quantity), [custom.saucesPerItem, quantity]);
-  const sauceCount = useMemo(() => selectedSauces.reduce((sum, s) => sum + s.quantity, 0), [selectedSauces]);
-  const drinkCount = useMemo(() => Object.values(selectedDrinks).reduce((a, b) => a + (b || 0), 0), [selectedDrinks]);
-  const componentCount = useMemo(() => Object.values(selectedComponent).reduce((a, b) => a + (b || 0), 0), [selectedComponent]);
-  const sideChoiceLimit = useMemo(() => (custom.sideChoice ? custom.sideChoice.choices * quantity : 0), [custom.sideChoice, quantity]);
-  const sideChoiceCount = useMemo(() => Object.values(selectedSideChoices).reduce((a, b) => a + (b || 0), 0), [selectedSideChoices]);
-  const multiChoiceCount = useMemo(() => Object.values(selectedMultiChoice).reduce((a, b) => a + (b || 0), 0), [selectedMultiChoice]);
-
-  const dessertACount = useMemo(() => {
-      if (!custom.dessertChoice) return 0;
-      const dessertGroupA = options.dessertsA.map(d => d.name);
-      return selectedDesserts.filter(d => dessertGroupA.includes(d.name)).reduce((s, d) => s + d.quantity, 0);
-  }, [selectedDesserts, options.dessertsA, custom.dessertChoice]);
-  const dessertBCount = useMemo(() => {
-      if (!custom.dessertChoice) return 0;
-      const dessertGroupB = options.dessertsB.map(d => d.name);
-      return selectedDesserts.filter(d => dessertGroupB.includes(d.name)).reduce((s, d) => s + d.quantity, 0);
-  }, [selectedDesserts, options.dessertsB, custom.dessertChoice]);
-
-  const pastaACount = useMemo(() => {
-      if (!custom.pastaChoice) return 0;
-      const pastaGroupA = options.pastasA.map(p => p.name);
-      return selectedPastas.filter(p => pastaGroupA.includes(p.name)).reduce((s, p) => s + p.quantity, 0);
-  }, [selectedPastas, options.pastasA, custom.pastaChoice]);
-  const pastaBCount = useMemo(() => {
-      if (!custom.pastaChoice) return 0;
-      const pastaGroupB = options.pastasB.map(p => p.name);
-      return selectedPastas.filter(p => pastaGroupB.includes(p.name)).reduce((s, p) => s + p.quantity, 0);
-  }, [selectedPastas, options.pastasB, custom.pastaChoice]);
-
-
-  const handleConfirm = () => {
-    setValidationError(null);
-
-    // Validations
-    if (custom.doneness && donenessCount !== quantity) {
-      setValidationError(`請選擇 ${quantity} 份熟度`); return;
-    }
-    if (custom.sauceChoice) {
-      const limit = custom.saucesPerItem ? custom.saucesPerItem * quantity : quantity;
-      if (sauceCount !== limit) {
-        setValidationError(`請選擇 ${limit} 份醬料`); return;
-      }
-    }
-    if (custom.drinkChoice && drinkCount !== quantity) {
-      setValidationError(`請選擇 ${quantity} 份飲料`); return;
-    }
-    if (custom.dessertChoice) {
-        if (dessertACount !== quantity || dessertBCount !== quantity) {
-            setValidationError(`A區和B區甜品各需選擇 ${quantity} 份`); return;
+        if (from === 'api' && (!menu || menu.length === 0 || menu.every(cat => cat.items.length === 0))) {
+            setMenuData(MENU_DATA);
+            setAddons(ADDONS);
+            setNotification('成功連接伺服器，但菜單是空的。請檢查後台 Google Sheet 是否已填入資料，或執行「一鍵設定工作表」。');
+        } else {
+            setMenuData(menu);
+            setAddons(addons);
         }
-    }
-    if (custom.pastaChoice) {
-        if (pastaACount !== quantity || pastaBCount !== quantity) {
-            setValidationError(`主食和醬料各需選擇 ${quantity} 份`); return;
-        }
-    }
-    if (custom.componentChoice && componentCount !== quantity) {
-      setValidationError(`${custom.componentChoice.title} 需選擇 ${quantity} 份`); return;
-    }
-    if (custom.sideChoice) {
-      const limit = custom.sideChoice.choices * quantity;
-      if (sideChoiceCount !== limit) {
-        setValidationError(`${custom.sideChoice.title} 需選擇 ${limit} 份`); return;
-      }
-    }
-    if (custom.multiChoice && multiChoiceCount !== quantity) {
-      setValidationError(`${custom.multiChoice.title} 需選擇 ${quantity} 份`); return;
-    }
 
-    onConfirmSelection(item, quantity, {
-      donenesses: selectedDonenesses,
-      sauces: selectedSauces,
-      drinks: selectedDrinks,
-      desserts: selectedDesserts,
-      pastas: selectedPastas,
-      componentChoices: selectedComponent,
-      sideChoices: selectedSideChoices,
-      multiChoice: selectedMultiChoice,
-      singleChoiceAddon: selectedSingleChoiceAddon,
-      notes: selectedNotes,
-      addons: selectedAddons,
-    }, category);
-    onClose();
-  };
-  
-  const renderChoiceCounter = (
-    choice: { name: string; isAvailable: boolean; },
-    currentCount: number,
-    onIncrement: () => void,
-    onDecrement: () => void
-  ) => {
-    const { name, isAvailable } = choice;
+        setOptions(apiOptions);
+
+        if (from === 'fallback') {
+            setNotification('無法連接伺服器，目前顯示的是離線菜單。');
+        }
+    }, []);
+    
+    useEffect(() => {
+        if (printContent) {
+            // A short delay ensures the content is rendered before the print dialog appears.
+            const timer = setTimeout(() => {
+                window.print();
+                // After the blocking print dialog is closed, this code will execute.
+                setPrintContent(null);
+                window.location.reload();
+            }, 100);
+
+            return () => {
+                clearTimeout(timer);
+            };
+        }
+    }, [printContent]);
+
+    const handlePrintRequest = (content: React.ReactNode) => {
+        setPrintContent(content);
+    };
+
+
+    useEffect(() => {
+        const initialLoad = async () => {
+            setLoading(true);
+            await fetchData();
+            setLoading(false);
+            if (sessionStorage.getItem('welcomeAgreed') !== 'true') {
+                setIsWelcomeModalOpen(true);
+            }
+        };
+        initialLoad();
+    }, [fetchData]);
+
+    const handleWelcomeAgree = () => {
+        sessionStorage.setItem('welcomeAgreed', 'true');
+        setIsWelcomeModalOpen(false);
+    };
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await fetchData();
+        setIsRefreshing(false);
+    };
+    
+    useEffect(() => {
+        const handleAdminKey = (event: KeyboardEvent) => {
+            if (event.key === '`') { // Tilde key
+                setIsAdminDashboardOpen(true);
+            }
+        };
+        window.addEventListener('keydown', handleAdminKey);
+        return () => window.removeEventListener('keydown', handleAdminKey);
+    }, []);
+
+    const handleSelectItem = (item: MenuItem, category: MenuCategory) => {
+        if (!item.isAvailable) return;
+        setSelectedItem({ item, category });
+    };
+
+    const handleCloseModal = () => {
+        setSelectedItem(null);
+        setEditingCartItem(null);
+        setIsEditingFromCart(false); 
+    };
+    
+    const handleEditItem = (cartId: string) => {
+        const itemToEdit = cart.find(i => i.cartId === cartId);
+        if(itemToEdit) {
+            const category = menuData.find(c => c.title === itemToEdit.categoryTitle) || { title: itemToEdit.categoryTitle, items: [] };
+            setIsEditingFromCart(true);
+            setEditingCartItem(itemToEdit);
+            setSelectedItem({ item: itemToEdit.item, category });
+        }
+    };
+
+    const createCartItemObject = (item: MenuItem, quantity: number, options: any, category: MenuCategory): Omit<CartItem, 'cartId'> => {
+        const { donenesses, drinks, addons, notes, sauces, desserts, pastas, singleChoiceAddon, multiChoice, componentChoices, sideChoices } = options;
+        
+        const generateStableObjectString = (obj: object) => {
+            if (!obj || Object.keys(obj).length === 0) return '';
+            return JSON.stringify(Object.fromEntries(Object.entries(obj).filter(([, val]) => val && Number(val) > 0).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))));
+        };
+        
+        const singleChoicePrice = singleChoiceAddon && item.customizations.singleChoiceAddon ? item.customizations.singleChoiceAddon.price : 0;
+        const totalAddonPrice = (addons || []).reduce((sum: number, addon: { price: number; quantity: number; }) => sum + (addon.price * addon.quantity), 0);
+        const totalPrice = (item.price + singleChoicePrice) * quantity + totalAddonPrice;
+
+        const cartKeyFields = {
+            id: item.id,
+            donenesses: generateStableObjectString(donenesses),
+            drinks: generateStableObjectString(drinks),
+            sideChoices: generateStableObjectString(sideChoices),
+            multiChoice: generateStableObjectString(multiChoice),
+            componentChoices: generateStableObjectString(componentChoices),
+            notes: notes,
+            addons: (addons || []).map((a: { id: string; quantity: any; }) => `${a.id}:${a.quantity}`).sort().join(','),
+            sauces: (sauces || []).map((s: { name: string; quantity: any; }) => `${s.name}:${s.quantity}`).sort().join(','),
+            desserts: (desserts || []).map((d: { name: string; quantity: any; }) => `${d.name}:${d.quantity}`).sort().join(','),
+            pastas: (pastas || []).map((p: { name: string; quantity: any; }) => `${p.name}:${p.quantity}`).sort().join(','),
+            singleChoiceAddon: singleChoiceAddon || 'none',
+        };
+        const cartKey = JSON.stringify(cartKeyFields);
+
+        return {
+            cartKey,
+            item,
+            quantity,
+            categoryTitle: category.title,
+            selectedDonenesses: donenesses,
+            selectedDrinks: drinks,
+            selectedSideChoices: sideChoices,
+            selectedAddons: addons || [],
+            selectedSauces: sauces || [],
+            selectedDesserts: desserts || [],
+            selectedPastas: pastas || [],
+            selectedComponent: componentChoices,
+            selectedNotes: notes,
+            selectedSingleChoiceAddon: singleChoiceAddon,
+            selectedMultiChoice: multiChoice,
+            totalPrice,
+        };
+    };
+    
+    const handleConfirmSelection = (item: MenuItem, quantity: number, options: any, category: MenuCategory) => {
+        const newOrUpdatedCartItem = createCartItemObject(item, quantity, options, category);
+
+        if (editingCartItem && cart.some(i => i.cartId === editingCartItem.cartId)) {
+            setCart(prevCart => prevCart.map(cartItem =>
+                cartItem.cartId === editingCartItem.cartId
+                    ? { ...newOrUpdatedCartItem, cartId: editingCartItem.cartId }
+                    : cartItem
+            ));
+        } else {
+            setCart(prevCart => {
+                const existingItemIndex = prevCart.findIndex(cartItem => cartItem.cartKey === newOrUpdatedCartItem.cartKey);
+                if (existingItemIndex > -1) {
+                    const updatedCart = [...prevCart];
+                    const existingItem = updatedCart[existingItemIndex];
+                    const newQuantity = existingItem.quantity + quantity;
+
+                    const singleChoicePrice = existingItem.selectedSingleChoiceAddon && item.customizations.singleChoiceAddon ? item.customizations.singleChoiceAddon.price : 0;
+                    const totalAddonPrice = (existingItem.selectedAddons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                    const newTotalPrice = (item.price + singleChoicePrice) * newQuantity + totalAddonPrice;
+
+                    updatedCart[existingItemIndex] = { ...existingItem, quantity: newQuantity, totalPrice: newTotalPrice };
+                    return updatedCart;
+                } else {
+                    const finalCartItem = { ...newOrUpdatedCartItem, cartId: `${newOrUpdatedCartItem.cartKey}-${Date.now()}` };
+                    return [...prevCart, finalCartItem];
+                }
+            });
+        }
+
+        if (isEditingFromCart) {
+            setIsCartOpen(true);
+        }
+    };
+    
+    const handleUpdateQuantity = (cartId: string, newQuantity: number) => {
+        setCart(prevCart => {
+            if (newQuantity <= 0) {
+                return prevCart.filter(item => item.cartId !== cartId);
+            }
+            return prevCart.map(item => {
+                if (item.cartId === cartId) {
+                    const singleChoicePrice = item.selectedSingleChoiceAddon && item.item.customizations.singleChoiceAddon ? item.item.customizations.singleChoiceAddon.price : 0;
+                    const totalAddonPrice = (item.selectedAddons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                    const newTotalPrice = (item.item.price + singleChoicePrice) * newQuantity + totalAddonPrice;
+                    return { ...item, quantity: newQuantity, totalPrice: newTotalPrice };
+                }
+                return item;
+            });
+        });
+    };
+
+    const handleRemoveFromCart = (cartId: string) => {
+        setCart(prevCart => prevCart.filter(item => item.cartId !== cartId));
+    };
+
+    const handleSubmitOrder = async (orderData: OrderData) => {
+        const result = await apiService.submitOrder(orderData);
+        if (result.success && result.orderId) {
+            setCart([]);
+            setIsCartOpen(false);
+            
+            // On success, trigger the print dialog. The useEffect for `printContent` will handle the rest.
+            handlePrintRequest(<PrintableOrder order={orderData} orderId={result.orderId} />);
+
+            const savedOrders = JSON.parse(localStorage.getItem('steakhouse-orders') || '[]');
+            if (!savedOrders.includes(result.orderId)) {
+                savedOrders.unshift(result.orderId);
+                localStorage.setItem('steakhouse-orders', JSON.stringify(savedOrders.slice(0, 10)));
+            }
+        }
+        return result;
+    };
+    
+    const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex flex-col justify-center items-center bg-slate-100">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-700"></div>
+                <p className="mt-4 text-slate-600 text-lg">正在載入菜單...</p>
+            </div>
+        );
+    }
 
     return (
-      <div key={name} className={`flex justify-between items-center bg-white p-3 rounded-md ${!isAvailable && currentCount === 0 ? 'opacity-50' : ''}`}>
-        <div className="flex flex-col">
-            <span className={`text-sm font-medium text-slate-800 ${!isAvailable ? 'line-through' : ''}`}>
-                {name}
-            </span>
-            {!isAvailable && <span className="text-xxs font-bold text-red-600">售完</span>}
-        </div>
-        <div className="flex items-center gap-2">
-            <button onClick={onDecrement} className="p-1 rounded-full bg-slate-200 hover:bg-slate-300 disabled:opacity-50" disabled={currentCount === 0}>
-                <MinusIcon className="h-4 w-4" />
-            </button>
-            <span className="font-semibold w-6 text-center">{currentCount}</span>
-            <button onClick={onIncrement} className="p-1 rounded-full bg-slate-200 hover:bg-slate-300 disabled:opacity-50" disabled={!isAvailable}>
-                <PlusIcon className="h-4 w-4" />
-            </button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderSimpleCounter = (
-    label: string,
-    count: number,
-    onIncrement: () => void,
-    onDecrement: () => void
-  ) => (
-    <div key={label} className="flex justify-between items-center bg-white p-3 rounded-md">
-      <span className="text-sm font-medium text-slate-800">{label}</span>
-      <div className="flex items-center gap-2">
-        <button onClick={onDecrement} className="p-1 rounded-full bg-slate-200 hover:bg-slate-300"><MinusIcon className="h-4 w-4" /></button>
-        <span className="font-semibold w-6 text-center">{count}</span>
-        <button onClick={onIncrement} className="p-1 rounded-full bg-slate-200 hover:bg-slate-300"><PlusIcon className="h-4 w-4" /></button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <header className="p-5 relative border-b">
-          <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-800"><CloseIcon /></button>
-          <h2 className="text-2xl font-bold text-slate-800">{item.name.replace(/半全餐|半套餐/g, '套餐')}</h2>
-          <p className="text-slate-500">{item.description}</p>
-        </header>
-
-        <main className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-6">
-          {custom.doneness && <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">選擇熟度 <span className="text-sm font-normal text-slate-500">(已選 {donenessCount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{DONENESS_LEVELS.map(level => renderSimpleCounter(level, selectedDonenesses[level] || 0, () => handleOptionChange(setSelectedDonenesses as any, level, 1, quantity), () => handleOptionChange(setSelectedDonenesses as any, level, -1, quantity)))}</div></div>}
-          
-          {custom.sauceChoice && <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">選擇醬料 <span className="text-sm font-normal text-slate-500">(已選 {sauceCount} / 共需選 {sauceLimit} 份)</span></h3><div className="grid grid-cols-2 gap-3">{options.sauces.map(sauce => renderChoiceCounter(sauce, selectedSauces.find(s => s.name === sauce.name)?.quantity || 0, () => { if(sauce.isAvailable) handleArrayOfObjectsChange(setSelectedSauces, sauce.name, 1, sauceLimit) }, () => handleArrayOfObjectsChange(setSelectedSauces, sauce.name, -1, sauceLimit)))}</div></div>}
-
-          {custom.drinkChoice && <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">選擇飲料 <span className="text-sm font-normal text-slate-500">(已選 {drinkCount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{DRINK_CHOICES.map(drink => renderSimpleCounter(drink, selectedDrinks[drink] || 0, () => handleOptionChange(setSelectedDrinks, drink, 1, quantity), () => handleOptionChange(setSelectedDrinks, drink, -1, quantity)))}</div></div>}
-          
-          {custom.componentChoice && <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">{custom.componentChoice.title} <span className="text-sm font-normal text-slate-500">(已選 {componentCount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{custom.componentChoice.options.map(c => renderSimpleCounter(c, selectedComponent[c] || 0, () => handleOptionChange(setSelectedComponent, c, 1, quantity), () => handleOptionChange(setSelectedComponent, c, -1, quantity)))}</div></div>}
-
-          {custom.sideChoice && <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">{custom.sideChoice.title} <span className="text-sm font-normal text-slate-500">(已選 {sideChoiceCount} / 共需選 {sideChoiceLimit} 份)</span></h3><div className="grid grid-cols-2 gap-3">{custom.sideChoice.options.map(s => renderSimpleCounter(s, selectedSideChoices[s] || 0, () => handleOptionChange(setSelectedSideChoices, s, 1, sideChoiceLimit), () => handleOptionChange(setSelectedSideChoices, s, -1, sideChoiceLimit)))}</div></div>}
-          
-          {custom.multiChoice && <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">{custom.multiChoice.title} <span className="text-sm font-normal text-slate-500">(已選 {multiChoiceCount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{options.coldNoodles.map(choice => renderChoiceCounter( choice, selectedMultiChoice[choice.name] || 0, () => { if (choice.isAvailable) handleOptionChange(setSelectedMultiChoice, choice.name, 1, quantity); }, () => handleOptionChange(setSelectedMultiChoice, choice.name, -1, quantity) ))}</div></div>}
-
-          {custom.dessertChoice && <>
-            <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">選擇甜品 (A區) <span className="text-sm font-normal text-slate-500">(已選 {dessertACount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{options.dessertsA.map(dessert => renderChoiceCounter(dessert, selectedDesserts.find(s => s.name === dessert.name)?.quantity || 0, () => { if (dessert.isAvailable) handleArrayOfObjectsChange(setSelectedDesserts, dessert.name, 1, quantity, options.dessertsA.map(d=>d.name)) }, () => handleArrayOfObjectsChange(setSelectedDesserts, dessert.name, -1, quantity, options.dessertsA.map(d=>d.name)) ))}</div></div>
-            <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">選擇甜品 (B區) <span className="text-sm font-normal text-slate-500">(已選 {dessertBCount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{options.dessertsB.map(dessert => renderChoiceCounter(dessert, selectedDesserts.find(s => s.name === dessert.name)?.quantity || 0, () => { if (dessert.isAvailable) handleArrayOfObjectsChange(setSelectedDesserts, dessert.name, 1, quantity, options.dessertsB.map(d=>d.name)) }, () => handleArrayOfObjectsChange(setSelectedDesserts, dessert.name, -1, quantity, options.dessertsB.map(d=>d.name)) ))}</div></div>
-          </>}
-
-          {custom.pastaChoice && <>
-            <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">選擇義大利麵主食 (A區) <span className="text-sm font-normal text-slate-500">(已選 {pastaACount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{options.pastasA.map(pasta => renderChoiceCounter(pasta, selectedPastas.find(s => s.name === pasta.name)?.quantity || 0, () => { if (pasta.isAvailable) handleArrayOfObjectsChange(setSelectedPastas, pasta.name, 1, quantity, options.pastasA.map(p=>p.name)) }, () => handleArrayOfObjectsChange(setSelectedPastas, pasta.name, -1, quantity, options.pastasA.map(p=>p.name)) ))}</div></div>
-            <div className="p-4 bg-slate-100 rounded-lg"><h3 className="font-semibold text-slate-700 mb-3">選擇義大利麵醬料 (B區) <span className="text-sm font-normal text-slate-500">(已選 {pastaBCount} / 共需選 {quantity} 份)</span></h3><div className="grid grid-cols-2 gap-3">{options.pastasB.map(pasta => renderChoiceCounter(pasta, selectedPastas.find(s => s.name === pasta.name)?.quantity || 0, () => { if (pasta.isAvailable) handleArrayOfObjectsChange(setSelectedPastas, pasta.name, 1, quantity, options.pastasB.map(p=>p.name)) }, () => handleArrayOfObjectsChange(setSelectedPastas, pasta.name, -1, quantity, options.pastasB.map(p=>p.name)) ))}</div></div>
-          </>}
-
-          {allAddons.filter(a => a.isAvailable).length > 0 && <div className="p-4 bg-slate-100 rounded-lg">
-            <h3 className="font-semibold text-slate-700 mb-3">其他加購</h3>
-            <div className="grid grid-cols-2 gap-3">{allAddons.filter(a => a.isAvailable).map(addon => renderSimpleCounter(`${addon.name} (+$${addon.price})`, selectedAddons.find(a => a.id === addon.id)?.quantity || 0, () => handleAddonChange(addon, 1), () => handleAddonChange(addon, -1)))}</div>
-          </div>}
-
-          {custom.notes && <div className="p-4 bg-slate-100 rounded-lg">
-            <h3 className="font-semibold text-slate-700 mb-2">備註</h3>
-            <textarea value={selectedNotes} onChange={e => setSelectedNotes(e.target.value)} placeholder="有什麼特殊需求嗎？" className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-green-500 outline-none" rows={3}></textarea>
-          </div>}
-        </main>
-
-        <footer className="p-5 border-t bg-slate-50">
-          <div className="flex justify-between items-center gap-4">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300"><MinusIcon /></button>
-              <span className="font-bold text-xl w-10 text-center">{quantity}</span>
-              <button onClick={() => setQuantity(quantity + 1)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300"><PlusIcon /></button>
+        <>
+            <div className="print-area">
+              {printContent}
             </div>
-            {validationError && <p className="text-red-500 text-sm font-semibold flex-1 text-center">{validationError}</p>}
-            <button onClick={handleConfirm} className="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap">
-              {editingItem ? `更新餐點 - $${totalPrice}` : `加入購物車 - $${totalPrice}`}
-            </button>
-          </div>
-        </footer>
-      </div>
-    </div>
-  );
+
+            <div className="no-print">
+                {isWelcomeModalOpen && <WelcomeModal onAgree={handleWelcomeAgree} />}
+                <div className="min-h-screen bg-slate-100 text-slate-800">
+                    {notification && (
+                        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
+                            <p className="font-bold">{notification}</p>
+                        </div>
+                    )}
+                    <header className="bg-white shadow-md sticky top-0 z-20">
+                        <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setIsQueryModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
+                                    <SearchIcon className="h-4 w-4"/>
+                                    <span>查詢訂單</span>
+                                </button>
+                                <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium disabled:opacity-50">
+                                    <RefreshIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}/>
+                                    <span>{isRefreshing ? '刷新中' : '刷新'}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="container mx-auto p-4 md:p-6 lg:p-8">
+                        <Menu menuData={menuData} onSelectItem={handleSelectItem} />
+                    </main>
+
+                    <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
+                        <div className="border-t border-slate-200 pt-8 space-y-2">
+                            <p>＊店內最低消費為一份餐點</p>
+                            <p>＊不收服務費，用完餐請回收餐具</p>
+                            <p>＊用餐限九十分鐘請勿飲酒</p>
+                            <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
+                        </div>
+                    </footer>
+
+                    <button
+                        onClick={() => setIsAiModalOpen(true)}
+                        className="fixed bottom-24 right-6 lg:bottom-28 lg:right-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50 h-16 w-16"
+                        aria-label="開啟 AI 點餐小幫手"
+                    >
+                        <SparklesIcon className="h-8 w-8" />
+                    </button>
+
+                    {cartItemCount > 0 && (
+                        <button
+                            onClick={() => setIsCartOpen(true)}
+                            className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 flex items-center justify-center bg-green-700 text-white rounded-full shadow-lg hover:bg-green-800 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 h-16 w-16"
+                            aria-label={`查看購物車，共有 ${cartItemCount} 項商品`}
+                        >
+                            <CartIcon className="h-8 w-8" />
+                            <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{cartItemCount}</span>
+                        </button>
+                    )}
+                </div>
+
+                <Cart
+                    isOpen={isCartOpen}
+                    onClose={() => setIsCartOpen(false)}
+                    cartItems={cart}
+                    onUpdateQuantity={handleUpdateQuantity}
+                    onRemoveItem={handleRemoveFromCart}
+                    onEditItem={handleEditItem}
+                    onSubmitOrder={handleSubmitOrder}
+                />
+
+                {selectedItem && (
+                    <ItemModal
+                        selectedItem={selectedItem}
+                        editingItem={editingCartItem}
+                        addons={addons}
+                        options={options}
+                        onClose={handleCloseModal}
+                        onConfirmSelection={handleConfirmSelection}
+                    />
+                )}
+                
+                <OrderQueryModal
+                    isOpen={isQueryModalOpen}
+                    onClose={() => setIsQueryModalOpen(false)}
+                />
+
+                <AdminDashboard 
+                    isOpen={isAdminDashboardOpen}
+                    onClose={() => setIsAdminDashboardOpen(false)}
+                    onPrintRequest={handlePrintRequest}
+                    onAvailabilityUpdate={fetchData}
+                />
+                
+                <AIAssistantModal
+                    isOpen={isAiModalOpen}
+                    onClose={() => setIsAiModalOpen(false)}
+                    menuData={menuData}
+                    addons={addons}
+                />
+            </div>
+        </>
+    );
 };
 
-export default ItemModal;
+export default App;
